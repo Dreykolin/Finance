@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.List
 import androidx.compose.material.icons.rounded.Payments
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Savings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -21,16 +22,15 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 
-// --- Rutas de navegación ---
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
-    data object Cuotas : Screen("cuotas", "Cuotas", Icons.Rounded.Payments)
     data object Gastos : Screen("gastos", "Gastos", Icons.AutoMirrored.Rounded.List)
+    data object Cuotas : Screen("cuotas", "Cuotas", Icons.Rounded.Payments)
+    data object Ahorros : Screen("ahorros", "Ahorros", Icons.Rounded.Savings)
     data object Ajustes : Screen("ajustes", "Ajustes", Icons.Rounded.Settings)
 }
 
-val items = listOf(Screen.Cuotas, Screen.Gastos, Screen.Ajustes)
+val items = listOf(Screen.Gastos, Screen.Cuotas, Screen.Ahorros, Screen.Ajustes)
 
-// --- Aplicación Principal ---
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -47,14 +47,15 @@ fun FinancesApp() {
     
     // Estados globales (compartidos)
     var presupuestoMensual by remember { mutableIntStateOf(90000) }
+    var metaAhorro by remember { mutableIntStateOf(500000) } // Nueva Meta de Ahorro
     var metodosVisibles by remember { 
         mutableStateOf(listOf("Crédito", "Débito", "Efectivo")) 
     }
 
-    // Asignación de colores para el Bottom Bar
     val Zinc900 = Color(0xFF18181B)
     val Zinc700 = Color(0xFF3F3F46)
     val White = Color(0xFFFFFFFF)
+    val Azure500 = Color(0xFF3B82F6)
 
     Scaffold(
         bottomBar = {
@@ -81,11 +82,11 @@ fun FinancesApp() {
                             }
                         },
                         colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = White,
-                            selectedTextColor = White,
+                            selectedIconColor = Azure500,
+                            selectedTextColor = Azure500,
                             unselectedIconColor = Zinc700,
                             unselectedTextColor = Zinc700,
-                            indicatorColor = Zinc700
+                            indicatorColor = Zinc700.copy(alpha = 0.3f)
                         )
                     )
                 }
@@ -94,23 +95,28 @@ fun FinancesApp() {
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = Screen.Cuotas.route,
+            startDestination = Screen.Gastos.route,
             modifier = Modifier.padding(innerPadding)
         ) {
-            composable(Screen.Cuotas.route) {
-                GestorCuotasScreen()
-            }
             composable(Screen.Gastos.route) {
                 ResumenGastosScreen(
                     presupuestoMensual = presupuestoMensual,
                     metodosVisibles = metodosVisibles
                 )
             }
+            composable(Screen.Cuotas.route) {
+                GestorCuotasScreen()
+            }
+            composable(Screen.Ahorros.route) {
+                AhorrosScreen(metaAhorro = metaAhorro)
+            }
             composable(Screen.Ajustes.route) {
                 AjustesScreen(
                     presupuestoActual = presupuestoMensual,
+                    metaAhorroActual = metaAhorro,
                     metodosSeleccionados = metodosVisibles,
                     onPresupuestoChanged = { presupuestoMensual = it },
+                    onMetaAhorroChanged = { metaAhorro = it },
                     onMetodosChanged = { metodosVisibles = it }
                 )
             }

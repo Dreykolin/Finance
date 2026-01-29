@@ -19,7 +19,14 @@ data class Gasto(
     val id: Int,
     val descripcion: String,
     val metodoPago: String,
-    val monto: Int, // Usaremos Int para simplificar el manejo en Kotlin
+    val monto: Int,
+    val fecha: String // YYYY-MM-DD
+)
+
+// --- MODELO DE DATOS (AHORROS) ---
+data class Ahorro(
+    val id: Int,
+    val monto: Int,
     val fecha: String // YYYY-MM-DD
 )
 

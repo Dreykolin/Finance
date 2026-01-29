@@ -31,11 +31,14 @@ private val Zinc950 = Color(0xFF09090B)
 @Composable
 fun AjustesScreen(
     presupuestoActual: Int,
+    metaAhorroActual: Int,
     metodosSeleccionados: List<String>,
     onPresupuestoChanged: (Int) -> Unit,
+    onMetaAhorroChanged: (Int) -> Unit,
     onMetodosChanged: (List<String>) -> Unit
 ) {
     var presupuestoInput by remember { mutableStateOf(presupuestoActual.toString()) }
+    var metaAhorroInput by remember { mutableStateOf(metaAhorroActual.toString()) }
     val todosLosMetodos = listOf("Efectivo", "Tarjeta", "Débito", "Crédito", "Transferencia")
 
     Surface(
@@ -58,14 +61,14 @@ fun AjustesScreen(
                     letterSpacing = (-1).sp
                 )
                 Text(
-                    text = "Configura tus preferencias y límites.",
+                    text = "Configura tus metas y preferencias.",
                     color = Zinc400,
                     fontSize = 16.sp,
                     modifier = Modifier.padding(top = 4.dp)
                 )
             }
 
-            // Sección Presupuesto
+            // Sección Presupuesto y Metas
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -76,16 +79,38 @@ fun AjustesScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text(
-                    text = "Presupuesto Mensual",
+                    text = "Límites y Metas",
                     color = White,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold
                 )
                 
+                // Input Presupuesto
                 OutlinedTextField(
                     value = presupuestoInput,
                     onValueChange = { if (it.all { char -> char.isDigit() }) presupuestoInput = it },
-                    label = { Text("Monto del Presupuesto") },
+                    label = { Text("Presupuesto Mensual") },
+                    prefix = { Text("$ ") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = Zinc950,
+                        unfocusedContainerColor = Zinc950,
+                        focusedBorderColor = White,
+                        unfocusedBorderColor = Zinc700,
+                        cursorColor = White,
+                        focusedLabelColor = White,
+                        unfocusedLabelColor = Zinc500
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                )
+
+                // Input Meta Ahorro
+                OutlinedTextField(
+                    value = metaAhorroInput,
+                    onValueChange = { if (it.all { char -> char.isDigit() }) metaAhorroInput = it },
+                    label = { Text("Meta de Ahorro Total") },
                     prefix = { Text("$ ") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -103,12 +128,15 @@ fun AjustesScreen(
                 )
 
                 Button(
-                    onClick = { onPresupuestoChanged(presupuestoInput.toIntOrNull() ?: 0) },
+                    onClick = { 
+                        onPresupuestoChanged(presupuestoInput.toIntOrNull() ?: 0)
+                        onMetaAhorroChanged(metaAhorroInput.toIntOrNull() ?: 0)
+                    },
                     colors = ButtonDefaults.buttonColors(containerColor = White, contentColor = Zinc950),
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.fillMaxWidth().height(48.dp)
                 ) {
-                    Text("Actualizar Presupuesto", fontWeight = FontWeight.Bold)
+                    Text("Actualizar Valores", fontWeight = FontWeight.Bold)
                 }
             }
 
@@ -127,11 +155,6 @@ fun AjustesScreen(
                     color = White,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "Selecciona qué métodos ver en el gráfico de barras.",
-                    color = Zinc500,
-                    fontSize = 14.sp
                 )
 
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

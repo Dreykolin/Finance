@@ -2,6 +2,7 @@ package com.example.finances
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -16,6 +17,7 @@ import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.*
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.time.LocalDate
@@ -30,8 +32,10 @@ import kotlin.math.roundToInt
 private val White = Color(0xFFFFFFFF)
 private val Zinc400 = Color(0xFFA1A1AA)
 private val Zinc500 = Color(0xFF71717A)
+private val Zinc800 = Color(0xFF27272A)
 private val Zinc950 = Color(0xFF09090B)
 private val Red500 = Color(0xFFEF4444)
+private val Azure500 = Color(0xFF3B82F6) // Color principal de la App
 
 @OptIn(ExperimentalTextApi::class)
 @Composable
@@ -71,7 +75,6 @@ fun GastosChart(
 
     // --- LÓGICA DE REDONDEO DINÁMICO (Eje Y) ---
     val stepCount = 4
-    // Calculamos una unidad de redondeo (10, 100, 1000, 10000...)
     val powerOf10 = 10f.pow(ceil(log10(rawMaxY / stepCount)).toInt() - 1)
     val niceStep = ceil((rawMaxY / stepCount) / powerOf10) * powerOf10
     val maxY = niceStep * stepCount
@@ -80,16 +83,25 @@ fun GastosChart(
     val density = LocalDensity.current
 
     val labelStyle = MaterialTheme.typography.bodySmall.copy(
-        color = Zinc400, fontSize = 11.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+        color = Zinc400, fontSize = 11.sp, fontWeight = FontWeight.Bold
     )
     val priceStyle = MaterialTheme.typography.bodySmall.copy(
         color = Zinc500, fontSize = 10.sp
     )
+    val tooltipStyle = MaterialTheme.typography.labelSmall.copy(
+        color = White, fontSize = 11.sp, fontWeight = FontWeight.Bold
+    )
+    val budgetLabelStyle = MaterialTheme.typography.labelSmall.copy(
+        color = Red500, fontSize = 10.sp, fontWeight = FontWeight.Bold
+    )
+
+    // Estado para el punto seleccionado
+    var selectedIndex by remember { mutableIntStateOf(-1) }
 
     BoxWithConstraints(modifier = modifier) {
         val widthPx = constraints.maxWidth.toFloat()
         val visibleMonths = 4
-        val yAxisWidth = with(density) { 55.dp.toPx() } // Aumentado para que quepa "mil"
+        val yAxisWidth = with(density) { 65.dp.toPx() }
         val graphWidth = widthPx - yAxisWidth
         val columnWidth = graphWidth / visibleMonths
         val contentWidth = max(graphWidth, columnWidth * labels.size)
@@ -106,6 +118,18 @@ fun GastosChart(
                     detectHorizontalDragGestures { change, dragAmount ->
                         change.consume()
                         scrollOffset = (scrollOffset - dragAmount).coerceIn(0f, maxScrollOffset)
+                        selectedIndex = -1 // Deseleccionar al hacer scroll
+                    }
+                }
+                .pointerInput(labels.size) {
+                    detectTapGestures { offset ->
+                        val localX = offset.x - yAxisWidth + scrollOffset
+                        val index = (localX / columnWidth).toInt()
+                        if (index in data.indices) {
+                            selectedIndex = if (selectedIndex == index) -1 else index
+                        } else {
+                            selectedIndex = -1
+                        }
                     }
                 }
         ) {
@@ -113,7 +137,7 @@ fun GastosChart(
             val bottomPadding = 35.dp.toPx()
             val graphHeight = height - bottomPadding
 
-            // --- CAPA 1: EJE Y ---
+            // --- CAPA 1: EJE Y (FIJO) ---
             for (i in 0..stepCount) {
                 val value = niceStep * i
                 val y = graphHeight - (value / maxY) * graphHeight
@@ -139,7 +163,7 @@ fun GastosChart(
                 )
             }
 
-            // Línea de Presupuesto
+            // Línea de Presupuesto y su Indicador
             val budgetY = graphHeight - (presupuestoMensual / maxY) * graphHeight
             if (budgetY >= 0) {
                 drawLine(
@@ -149,9 +173,19 @@ fun GastosChart(
                     strokeWidth = 2.dp.toPx(),
                     pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
                 )
+
+                val budgetText = "LÍMITE: ${formatCLP(presupuestoMensual)}"
+                val budgetMeasured = textMeasurer.measure(budgetText, style = budgetLabelStyle)
+                drawText(
+                    textLayoutResult = budgetMeasured,
+                    topLeft = Offset(
+                        x = size.width - budgetMeasured.size.width - 10f,
+                        y = budgetY - budgetMeasured.size.height - 4f
+                    )
+                )
             }
 
-            // --- CAPA 2: GRÁFICO ---
+            // --- CAPA 2: CONTENIDO SCROLLABLE (GRÁFICO + ETIQUETAS X) ---
             clipRect(left = yAxisWidth, right = size.width, top = 0f, bottom = size.height) {
                 translate(left = -scrollOffset + yAxisWidth) {
                     if (data.isNotEmpty()) {
@@ -178,6 +212,7 @@ fun GastosChart(
                             )
                         }
 
+                        // Relleno Gradiente y Línea en AZUL
                         val fillPath = Path().apply {
                             addPath(path)
                             lineTo(points.last().x, graphHeight)
@@ -187,25 +222,55 @@ fun GastosChart(
                         drawPath(
                             path = fillPath,
                             brush = Brush.verticalGradient(
-                                colors = listOf(White.copy(alpha = 0.1f), Color.Transparent),
+                                colors = listOf(Azure500.copy(alpha = 0.1f), Color.Transparent),
                                 startY = 0f,
                                 endY = graphHeight
                             )
                         )
-
                         drawPath(
                             path = path,
-                            color = White,
-                            style = Stroke(
-                                width = 3.dp.toPx(),
-                                cap = StrokeCap.Round,
-                                join = StrokeJoin.Round
-                            )
+                            color = Azure500, // CAMBIO A AZUL
+                            style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                         )
 
-                        points.forEach { point ->
-                            drawCircle(Zinc950, radius = 6.dp.toPx(), center = point)
-                            drawCircle(White, radius = 6.dp.toPx(), center = point, style = Stroke(2.dp.toPx()))
+                        // Puntos en AZUL
+                        points.forEachIndexed { index, point ->
+                            val isSelected = index == selectedIndex
+                            val radius = if (isSelected) 8.dp.toPx() else 6.dp.toPx()
+                            
+                            drawCircle(Zinc950, radius = radius, center = point)
+                            drawCircle(
+                                color = if (isSelected) White else Azure500, // CAMBIO A AZUL
+                                radius = radius,
+                                center = point,
+                                style = Stroke(if (isSelected) 3.dp.toPx() else 2.dp.toPx())
+                            )
+
+                            if (isSelected) {
+                                val preciseValue = formatCLP(data[index].toInt())
+                                val tooltipResult = textMeasurer.measure(preciseValue, style = tooltipStyle)
+                                
+                                val tooltipWidth = tooltipResult.size.width + 16f
+                                val tooltipHeight = tooltipResult.size.height + 8f
+                                val tooltipOffset = Offset(
+                                    x = point.x - (tooltipWidth / 2),
+                                    y = point.y - tooltipHeight - 12f
+                                )
+
+                                drawRoundRect(
+                                    color = Zinc800,
+                                    topLeft = tooltipOffset,
+                                    size = androidx.compose.ui.geometry.Size(tooltipWidth, tooltipHeight),
+                                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(6.dp.toPx())
+                                )
+                                drawText(
+                                    textLayoutResult = tooltipResult,
+                                    topLeft = Offset(
+                                        x = tooltipOffset.x + 8f,
+                                        y = tooltipOffset.y + 4f
+                                    )
+                                )
+                            }
                         }
                     }
                 }
