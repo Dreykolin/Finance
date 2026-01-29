@@ -32,7 +32,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 // --- DEFINICIÓN DE COLORES LOCALES ---
-// Se definen aquí para evitar errores de referencia
 private val White = Color(0xFFFFFFFF)
 private val Zinc500 = Color(0xFF71717A)
 private val Zinc700 = Color(0xFF3F3F46)
@@ -41,7 +40,6 @@ private val Zinc900 = Color(0xFF18181B)
 private val Zinc950 = Color(0xFF09090B)
 private val Emerald500 = Color(0xFF10B981)
 
-// --- 4. COMPONENTE GRÁFICO (PIE CHART) ---
 @Composable
 fun CuotasPieChart(
     cuotasPagadas: Int,
@@ -94,7 +92,6 @@ fun CuotasPieChart(
     }
 }
 
-// --- 5. PANTALLA PRINCIPAL ---
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GestorCuotasScreen() {
@@ -110,18 +107,19 @@ fun GestorCuotasScreen() {
 
     var selectedCompra by remember { mutableStateOf<CompraCuotas?>(null) }
     var showSheet by remember { mutableStateOf(false) }
-
-    // El truco está aquí: skipPartiallyExpanded = true obliga al sheet a abrirse completo
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val totalPagadas = compras.sumOf { it.cuotasPagadas }
     val totalCuotas = compras.sumOf { it.cuotasTotales }
+    
+    // Cálculo de monto total a pagar este mes
+    val montoMensualTotal = compras.filter { it.cuotasPagadas < it.cuotasTotales }.sumOf { it.montoCuota }
 
     Scaffold(
         containerColor = Zinc950
     ) { padding ->
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
-            // HEADER ESTÁTICO (NO DESAPARECE)
+            // HEADER MEJORADO
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -129,7 +127,7 @@ fun GestorCuotasScreen() {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             imageVector = Icons.Rounded.CreditCard,
@@ -145,25 +143,37 @@ fun GestorCuotasScreen() {
                             fontWeight = FontWeight.ExtraBold,
                         )
                     }
-                    Text(
-                        text = "Progreso global",
-                        color = Zinc500,
-                        fontSize = 14.sp,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
+                    
+                    // --- NUEVA INFO AL LADO DEL GRÁFICO ---
+                    Column(modifier = Modifier.padding(top = 8.dp)) {
+                        Text(
+                            text = "Por pagar este mes:",
+                            color = Zinc500,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.5.sp
+                        )
+                        Text(
+                            text = formatCLP(montoMensualTotal),
+                            color = White,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
 
+                // Gráfico circular a la derecha
                 CuotasPieChart(
                     cuotasPagadas = totalPagadas,
                     cuotasTotales = totalCuotas,
-                    size = 56.dp,
-                    strokeWidth = 6.dp
+                    size = 64.dp,
+                    strokeWidth = 7.dp
                 )
             }
 
             HorizontalDivider(color = Zinc800, thickness = 1.dp, modifier = Modifier.padding(horizontal = 24.dp))
 
-            // LISTA DE COMPRAS (DESLIZABLE)
+            // LISTA DE COMPRAS
             LazyColumn(
                 contentPadding = PaddingValues(24.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -195,7 +205,6 @@ fun GestorCuotasScreen() {
             }
         }
 
-        // PANEL DE DETALLES (MODAL BOTTOM SHEET)
         if (showSheet && selectedCompra != null) {
             ModalBottomSheet(
                 onDismissRequest = { showSheet = false },
@@ -208,8 +217,6 @@ fun GestorCuotasScreen() {
         }
     }
 }
-
-// --- 6. COMPONENTES INDIVIDUALES ---
 
 @Composable
 fun CompraItemCard(
@@ -358,17 +365,6 @@ fun ResumenRow(label: String, value: String, valueColor: Color, isBold: Boolean 
         Text(text = label, color = Zinc500, fontSize = 14.sp)
         Text(text = value, color = valueColor, fontSize = if(isBold) 18.sp else 15.sp, fontWeight = if(isBold) FontWeight.Bold else FontWeight.Medium)
     }
-}
-
-// Extensión para simular border-bottom
-fun Modifier.drawBehindBottomBorder(color: Color, strokeWidth: Dp = 1.dp) = this.drawBehind {
-    val strokeWidthPx = strokeWidth.toPx()
-    drawLine(
-        color = color,
-        start = Offset(0f, size.height),
-        end = Offset(size.width, size.height),
-        strokeWidth = strokeWidthPx
-    )
 }
 
 @Preview(showBackground = true)

@@ -5,11 +5,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.List // Importación corregida
+import androidx.compose.material.icons.automirrored.rounded.List
 import androidx.compose.material.icons.rounded.Payments
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -24,11 +24,11 @@ import androidx.navigation.compose.rememberNavController
 // --- Rutas de navegación ---
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
     data object Cuotas : Screen("cuotas", "Cuotas", Icons.Rounded.Payments)
-    // Se usa la versión AutoMirrored para corregir el warning
     data object Gastos : Screen("gastos", "Gastos", Icons.AutoMirrored.Rounded.List)
+    data object Ajustes : Screen("ajustes", "Ajustes", Icons.Rounded.Settings)
 }
 
-val items = listOf(Screen.Cuotas, Screen.Gastos)
+val items = listOf(Screen.Cuotas, Screen.Gastos, Screen.Ajustes)
 
 // --- Aplicación Principal ---
 class MainActivity : ComponentActivity() {
@@ -44,6 +44,12 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun FinancesApp() {
     val navController = rememberNavController()
+    
+    // Estados globales (compartidos)
+    var presupuestoMensual by remember { mutableIntStateOf(90000) }
+    var metodosVisibles by remember { 
+        mutableStateOf(listOf("Crédito", "Débito", "Efectivo")) 
+    }
 
     // Asignación de colores para el Bottom Bar
     val Zinc900 = Color(0xFF18181B)
@@ -67,13 +73,10 @@ fun FinancesApp() {
                         selected = selected,
                         onClick = {
                             navController.navigate(screen.route) {
-                                // Evita construir una gran pila de destinos al navegar
                                 popUpTo(navController.graph.findStartDestination().id) {
                                     saveState = true
                                 }
-                                // Evita múltiples copias del mismo destino en la pila
                                 launchSingleTop = true
-                                // Restaura el estado al cambiar de pestaña
                                 restoreState = true
                             }
                         },
@@ -91,14 +94,25 @@ fun FinancesApp() {
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = Screen.Cuotas.route, // La pestaña de Cuotas será la principal
+            startDestination = Screen.Cuotas.route,
             modifier = Modifier.padding(innerPadding)
         ) {
             composable(Screen.Cuotas.route) {
                 GestorCuotasScreen()
             }
             composable(Screen.Gastos.route) {
-                ResumenGastosScreen()
+                ResumenGastosScreen(
+                    presupuestoMensual = presupuestoMensual,
+                    metodosVisibles = metodosVisibles
+                )
+            }
+            composable(Screen.Ajustes.route) {
+                AjustesScreen(
+                    presupuestoActual = presupuestoMensual,
+                    metodosSeleccionados = metodosVisibles,
+                    onPresupuestoChanged = { presupuestoMensual = it },
+                    onMetodosChanged = { metodosVisibles = it }
+                )
             }
         }
     }

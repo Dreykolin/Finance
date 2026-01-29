@@ -9,8 +9,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ShowChart
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.rounded.ShowChart
 import androidx.compose.material.icons.rounded.PieChart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -31,7 +31,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 
 // --- 1. DEFINICIÓN DE COLORES ---
-// Usamos los definidos en ColorConstants.kt si existen, o locales para consistencia
 private val White = Color(0xFFFFFFFF)
 private val Zinc300 = Color(0xFFD4D4D8)
 private val Zinc400 = Color(0xFFA1A1AA)
@@ -67,7 +66,10 @@ private val initialGastos = listOf(
 )
 
 @Composable
-fun ResumenGastosScreen() {
+fun ResumenGastosScreen(
+    presupuestoMensual: Int = 90000,
+    metodosVisibles: List<String> = listOf("Crédito", "Débito", "Efectivo")
+) {
     var gastos by remember { mutableStateOf(initialGastos) }
 
     // Estados independientes para cada gráfico
@@ -121,7 +123,7 @@ fun ResumenGastosScreen() {
                         modifier = Modifier.weight(1f).height(50.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Rounded.ShowChart,
+                            imageVector = Icons.AutoMirrored.Rounded.ShowChart,
                             contentDescription = null,
                             tint = if (mostrarTendencias) White else Zinc500,
                             modifier = Modifier.size(18.dp)
@@ -182,7 +184,7 @@ fun ResumenGastosScreen() {
                             letterSpacing = 1.sp,
                             modifier = Modifier.padding(start = 16.dp)
                         )
-                        GastosChart(gastos = gastos)
+                        GastosChart(gastos = gastos, presupuestoMensual = presupuestoMensual)
                     }
                 }
             }
@@ -206,7 +208,7 @@ fun ResumenGastosScreen() {
                             letterSpacing = 1.sp,
                             modifier = Modifier.padding(start = 16.dp)
                         )
-                        MetodoPagoChart(gastos = gastos)
+                        MetodoPagoChart(gastos = gastos, metodosAVisualizar = metodosVisibles)
                     }
                 }
             }
@@ -221,7 +223,7 @@ fun ResumenGastosScreen() {
     }
 }
 
-// --- Componentes de la Lista ---
+// --- Componentes de la Lista (Sin cambios, pero incluidos para consistencia) ---
 
 @Composable
 fun ListaGastosSection(
