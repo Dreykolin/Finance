@@ -27,7 +27,16 @@ data class Gasto(
 data class Ahorro(
     val id: Int,
     val monto: Int,
-    val fecha: String // YYYY-MM-DD
+    val fecha: String, // YYYY-MM-DD
+    val esRetiro: Boolean = false
+)
+
+// --- MODELO DE DATOS (METAS) ---
+data class MetaAhorro(
+    val id: Int,
+    val nombre: String,
+    val montoObjetivo: Int,
+    val completada: Boolean = false
 )
 
 // --- UTILIDADES ---

@@ -45,11 +45,17 @@ class MainActivity : ComponentActivity() {
 fun FinancesApp() {
     val navController = rememberNavController()
     
-    // Estados globales (compartidos)
+    // Estados globales
     var presupuestoMensual by remember { mutableIntStateOf(90000) }
-    var metaAhorro by remember { mutableIntStateOf(500000) } // Nueva Meta de Ahorro
     var metodosVisibles by remember { 
         mutableStateOf(listOf("Crédito", "Débito", "Efectivo")) 
+    }
+    
+    var metasAhorro by remember { 
+        mutableStateOf(listOf(
+            MetaAhorro(1, "Fondo de Emergencia", 1000000),
+            MetaAhorro(2, "Viaje a la Playa", 350000)
+        )) 
     }
 
     val Zinc900 = Color(0xFF18181B)
@@ -101,31 +107,28 @@ fun FinancesApp() {
             composable(Screen.Gastos.route) {
                 ResumenGastosScreen(
                     presupuestoMensual = presupuestoMensual,
-                    metodosVisibles = metodosVisibles
+                    onPresupuestoChanged = { presupuestoMensual = it },
+                    metodosVisibles = metodosVisibles,
+                    onMetodosChanged = { metodosVisibles = it }
                 )
             }
             composable(Screen.Cuotas.route) {
                 GestorCuotasScreen()
             }
             composable(Screen.Ahorros.route) {
-                AhorrosScreen(metaAhorro = metaAhorro)
+                AhorrosScreen(
+                    metas = metasAhorro,
+                    onMetasChanged = { metasAhorro = it }
+                )
             }
             composable(Screen.Ajustes.route) {
                 AjustesScreen(
                     presupuestoActual = presupuestoMensual,
-                    metaAhorroActual = metaAhorro,
                     metodosSeleccionados = metodosVisibles,
                     onPresupuestoChanged = { presupuestoMensual = it },
-                    onMetaAhorroChanged = { metaAhorro = it },
                     onMetodosChanged = { metodosVisibles = it }
                 )
             }
         }
     }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun PreviewFinancesApp() {
-    FinancesApp()
 }

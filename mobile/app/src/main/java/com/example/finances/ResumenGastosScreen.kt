@@ -1,7 +1,6 @@
 package com.example.finances
 
 import androidx.compose.animation.animateContentSize
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -9,9 +8,14 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ShowChart
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.rounded.PieChart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -21,16 +25,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.foundation.shape.CornerSize
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.foundation.text.KeyboardOptions
 
 private val White = Color(0xFFFFFFFF)
 private val Zinc300 = Color(0xFFD4D4D8)
@@ -41,29 +46,34 @@ private val Zinc700 = Color(0xFF3F3F46)
 private val Zinc800 = Color(0xFF27272A)
 private val Zinc900 = Color(0xFF18181B)
 private val Zinc950 = Color(0xFF09090B)
+private val Azure500 = Color(0xFF3B82F6)
+private val Red500 = Color(0xFFEF4444)
 
 private val initialGastos = listOf(
-    Gasto(1, "Supermercado Jumbo - Compra del mes con carnes y verduras", "Tarjeta", 45000, "2026-01-10"),
+    Gasto(1, "Supermercado Jumbo - Compra del mes", "Tarjeta", 45000, "2026-01-10"),
     Gasto(2, "Transporte Uber al centro", "Efectivo", 8000, "2026-01-11"),
     Gasto(3, "Cine Hoyts - Estreno Batman", "Tarjeta", 12000, "2026-02-12"),
     Gasto(4, "Farmacia Cruz Verde - Vitaminas", "Débito", 15000, "2026-02-13"),
     Gasto(5, "Restaurante Italiano - Cena familiar", "Crédito", 38000, "2026-02-14"),
     Gasto(6, "Gasolina Shell - Llenado estanque", "Débito", 32000, "2026-03-15"),
     Gasto(7, "Internet Hogar - Plan 1GB", "Transferencia", 27000, "2026-03-16"),
-    Gasto(8, "Luz Enel - Pago Marzo", "Transferencia", 21000, "2026-03-17"),
-    Gasto(9, "Agua Andina - Pago Marzo", "Transferencia", 18000, "2026-03-18"),
-    Gasto(10, "Comida rápida McDonald's", "Efectivo", 9000, "2026-03-19"),
-    Gasto(11, "Mantenimiento Preventivo Auto - Cambio de Aceite y Filtros", "Débito", 120000, "2026-06-15")
+    Gasto(11, "Mantenimiento Auto - Cambio de Aceite", "Débito", 120000, "2026-06-15")
 )
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ResumenGastosScreen(
-    presupuestoMensual: Int = 90000,
-    metodosVisibles: List<String> = listOf("Crédito", "Débito", "Efectivo")
+    presupuestoMensual: Int,
+    onPresupuestoChanged: (Int) -> Unit,
+    metodosVisibles: List<String>,
+    onMetodosChanged: (List<String>) -> Unit
 ) {
     var gastos by remember { mutableStateOf(initialGastos) }
     var mostrarTendencias by remember { mutableStateOf(false) }
     var mostrarMetodos by remember { mutableStateOf(false) }
+    var showChartSettings by remember { mutableStateOf(false) }
+
+    val sheetState = rememberModalBottomSheetState()
 
     Surface(modifier = Modifier.fillMaxSize(), color = Zinc950) {
         LazyColumn(
@@ -71,20 +81,31 @@ fun ResumenGastosScreen(
             verticalArrangement = Arrangement.spacedBy(24.dp),
             modifier = Modifier.fillMaxSize()
         ) {
+            // HEADER CON ICONO DE AJUSTES
             item {
-                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-                    Text("Resumen de Gastos", color = White, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-1).sp)
-                    Text("Controla y analiza tus finanzas mensuales.", color = Zinc400, fontSize = 16.sp, modifier = Modifier.padding(top = 4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Resumen de Gastos", color = White, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-1).sp)
+                        Text("Controla y analiza tus finanzas.", color = Zinc400, fontSize = 16.sp, modifier = Modifier.padding(top = 4.dp))
+                    }
+                    IconButton(
+                        onClick = { showChartSettings = true },
+                        colors = IconButtonDefaults.iconButtonColors(containerColor = Zinc900)
+                    ) {
+                        Icon(Icons.Default.Tune, null, tint = Azure500)
+                    }
                 }
             }
 
+            // BOTONES DE GRÁFICOS
             item {
                 Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(
-                        onClick = { 
-                            mostrarTendencias = !mostrarTendencias
-                            if (mostrarTendencias) mostrarMetodos = false
-                        },
+                        onClick = { mostrarTendencias = !mostrarTendencias; if (mostrarTendencias) mostrarMetodos = false },
                         colors = ButtonDefaults.buttonColors(containerColor = if (mostrarTendencias) Zinc800 else Zinc900, contentColor = White),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.weight(1f).height(50.dp)
@@ -95,10 +116,7 @@ fun ResumenGastosScreen(
                     }
 
                     Button(
-                        onClick = { 
-                            mostrarMetodos = !mostrarMetodos
-                            if (mostrarMetodos) mostrarTendencias = false
-                        },
+                        onClick = { mostrarMetodos = !mostrarMetodos; if (mostrarMetodos) mostrarTendencias = false },
                         colors = ButtonDefaults.buttonColors(containerColor = if (mostrarMetodos) Zinc800 else Zinc900, contentColor = White),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.weight(1f).height(50.dp)
@@ -126,7 +144,97 @@ fun ResumenGastosScreen(
                 }
             }
 
-            item { ListaGastosSection(gastos = gastos) { nuevo -> gastos = gastos + nuevo.copy(id = (gastos.lastOrNull()?.id ?: 0) + 1) } }
+            item { 
+                ListaGastosSection(
+                    gastos = gastos, 
+                    onAgregarGasto = { nuevo -> gastos = (gastos + nuevo.copy(id = (gastos.lastOrNull()?.id ?: 0) + 1)).sortedByDescending { it.fecha } },
+                    onEliminarGasto = { gasto -> gastos = gastos.filter { it.id != gasto.id } }
+                ) 
+            }
+        }
+
+        // MODAL DE CONFIGURACIÓN DE GRÁFICOS
+        if (showChartSettings) {
+            ModalBottomSheet(
+                onDismissRequest = { showChartSettings = false },
+                sheetState = sheetState,
+                containerColor = Zinc900,
+                dragHandle = { BottomSheetDefaults.DragHandle(color = Zinc700) }
+            ) {
+                SettingsPanel(
+                    presupuestoActual = presupuestoMensual,
+                    onPresupuestoChanged = onPresupuestoChanged,
+                    metodosSeleccionados = metodosVisibles,
+                    onMetodosChanged = onMetodosChanged
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun SettingsPanel(
+    presupuestoActual: Int,
+    onPresupuestoChanged: (Int) -> Unit,
+    metodosSeleccionados: List<String>,
+    onMetodosChanged: (List<String>) -> Unit
+) {
+    var tempPresupuesto by remember { mutableStateOf(presupuestoActual.toString()) }
+    val todosLosMetodos = listOf("Efectivo", "Tarjeta", "Débito", "Crédito", "Transferencia")
+
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(24.dp).padding(bottom = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(24.dp)
+    ) {
+        Text("Configuración de Gráficos", color = White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+
+        // Presupuesto
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Presupuesto Mensual (Línea Roja)", color = Zinc400, fontSize = 14.sp)
+            OutlinedTextField(
+                value = tempPresupuesto,
+                onValueChange = { 
+                    if (it.all { c -> c.isDigit() }) {
+                        tempPresupuesto = it
+                        it.toIntOrNull()?.let { valInt -> onPresupuestoChanged(valInt) }
+                    }
+                },
+                prefix = { Text("$ ", color = Zinc500) },
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = Zinc950, unfocusedContainerColor = Zinc950, focusedBorderColor = Azure500),
+                shape = RoundedCornerShape(12.dp)
+            )
+        }
+
+        // Métodos de Pago
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Métodos Visibles (Gráfico de Barras)", color = Zinc400, fontSize = 14.sp)
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                todosLosMetodos.forEach { metodo ->
+                    val isSelected = metodosSeleccionados.contains(metodo)
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = {
+                            val newList = if (isSelected) metodosSeleccionados - metodo else metodosSeleccionados + metodo
+                            onMetodosChanged(newList)
+                        },
+                        label = { Text(metodo) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Azure500,
+                            selectedLabelColor = White,
+                            containerColor = Zinc800,
+                            labelColor = Zinc400
+                        ),
+                        border = null
+                    )
+                }
+            }
         }
     }
 }
@@ -143,28 +251,31 @@ fun ChartContainer(title: String, content: @Composable () -> Unit) {
 }
 
 @Composable
-fun ListaGastosSection(gastos: List<Gasto>, onAgregarGasto: (Gasto) -> Unit) {
+fun ListaGastosSection(gastos: List<Gasto>, onAgregarGasto: (Gasto) -> Unit, onEliminarGasto: (Gasto) -> Unit) {
     var mostrarFormulario by remember { mutableStateOf(false) }
+    var gastoAEliminar by remember { mutableStateOf<Gasto?>(null) }
+
+    if (gastoAEliminar != null) {
+        AlertDialog(
+            onDismissRequest = { gastoAEliminar = null },
+            containerColor = Zinc900,
+            title = { Text("¿Eliminar gasto?", color = White, fontWeight = FontWeight.Bold) },
+            text = { Text("Esta acción no se puede deshacer. ¿Realmente quieres borrar \"${gastoAEliminar?.descripcion}\"?", color = Zinc400) },
+            confirmButton = { TextButton(onClick = { onEliminarGasto(gastoAEliminar!!); gastoAEliminar = null }) { Text("Eliminar", color = Red500, fontWeight = FontWeight.Bold) } },
+            dismissButton = { TextButton(onClick = { gastoAEliminar = null }) { Text("Cancelar", color = Zinc500) } }
+        )
+    }
+
     Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Zinc900).border(1.dp, Zinc800, RoundedCornerShape(12.dp)).padding(16.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Row(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("Lista de Gastos", color = White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            Button(
-                onClick = { mostrarFormulario = !mostrarFormulario }, 
-                colors = ButtonDefaults.buttonColors(containerColor = if (mostrarFormulario) Zinc800 else White, contentColor = if (mostrarFormulario) Zinc300 else Zinc950),
-                shape = RoundedCornerShape(8.dp),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-            ) {
+            Button(onClick = { mostrarFormulario = !mostrarFormulario }, colors = ButtonDefaults.buttonColors(containerColor = if (mostrarFormulario) Zinc800 else White, contentColor = if (mostrarFormulario) Zinc300 else Zinc950), shape = RoundedCornerShape(8.dp)) {
                 Text(if (mostrarFormulario) "✕ Cancelar" else "+ Añadir", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
             }
         }
-        
         if (mostrarFormulario) FormularioNuevoGasto(onAgregarGasto) { mostrarFormulario = false }
         Spacer(modifier = Modifier.height(16.dp))
-        TablaGastos(gastos)
+        TablaGastos(gastos, onEliminarClick = { gastoAEliminar = it })
     }
 }
 
@@ -174,113 +285,57 @@ fun FormularioNuevoGasto(onSave: (Gasto) -> Unit, onCancel: () -> Unit) {
     var descripcion by remember { mutableStateOf("") }
     var metodoPago by remember { mutableStateOf<String?>(null) }
     var monto by remember { mutableStateOf("") }
-    var fecha by remember { mutableStateOf(LocalDate.now().toString()) }
+    var selectedDate by remember { mutableStateOf(LocalDate.now()) }
+    var showDatePicker by remember { mutableStateOf(false) }
+    val dateState = rememberDatePickerState(initialSelectedDateMillis = selectedDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli())
+    if (showDatePicker) {
+        DatePickerDialog(onDismissRequest = { showDatePicker = false }, confirmButton = { TextButton(onClick = { dateState.selectedDateMillis?.let { selectedDate = Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate() }; showDatePicker = false }) { Text("OK", color = Azure500) } }, dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancelar") } }, colors = DatePickerDefaults.colors(containerColor = Zinc900)) { DatePicker(state = dateState) }
+    }
     Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Zinc950).border(1.dp, Zinc700, RoundedCornerShape(12.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         OutlinedTextField(value = descripcion, onValueChange = { descripcion = it }, label = { Text("Descripción") }, modifier = Modifier.fillMaxWidth(), colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = Zinc950, unfocusedContainerColor = Zinc950, focusedBorderColor = White, unfocusedBorderColor = Zinc700, cursorColor = White), shape = RoundedCornerShape(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            OutlinedTextField(value = monto, onValueChange = { monto = it.filter { it.isDigit() } }, label = { Text("Monto") }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = Zinc950, unfocusedContainerColor = Zinc950), shape = RoundedCornerShape(8.dp))
-            OutlinedTextField(value = fecha, onValueChange = { fecha = it }, label = { Text("Fecha (YYYY-MM-DD)") }, modifier = Modifier.weight(1f), colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = Zinc950, unfocusedContainerColor = Zinc950), shape = RoundedCornerShape(8.dp))
+            OutlinedTextField(value = monto, onValueChange = { monto = it.filter { char -> char.isDigit() } }, label = { Text("Monto") }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = Zinc950, unfocusedContainerColor = Zinc950), shape = RoundedCornerShape(8.dp))
+            OutlinedTextField(value = selectedDate.format(DateTimeFormatter.ofPattern("dd/MM/yy")), onValueChange = {}, readOnly = true, label = { Text("Fecha") }, trailingIcon = { IconButton(onClick = { showDatePicker = true }) { Icon(Icons.Default.CalendarMonth, null, tint = Zinc400) } }, modifier = Modifier.weight(1f).clickable { showDatePicker = true }, colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = Zinc950, unfocusedContainerColor = Zinc950, focusedBorderColor = Zinc700), shape = RoundedCornerShape(8.dp))
         }
-        
         var expanded by remember { mutableStateOf(false) }
         val metodos = listOf("Efectivo", "Tarjeta", "Débito", "Crédito", "Transferencia")
         Box(modifier = Modifier.fillMaxWidth()) {
-            OutlinedTextField(
-                value = metodoPago ?: "Método de Pago",
-                onValueChange = {},
-                readOnly = true,
-                label = { Text("Método") },
-                trailingIcon = { Icon(Icons.Filled.ArrowDropDown, null, Modifier.clickable { expanded = true }) },
-                modifier = Modifier.fillMaxWidth().clickable { expanded = true },
-                colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = Zinc950, unfocusedContainerColor = Zinc950, focusedBorderColor = White, unfocusedBorderColor = Zinc700),
-                shape = RoundedCornerShape(8.dp)
-            )
+            OutlinedTextField(value = metodoPago ?: "Seleccionar método...", onValueChange = {}, readOnly = true, label = { Text("Método de Pago") }, trailingIcon = { Icon(Icons.Filled.ArrowDropDown, null, Modifier.clickable { expanded = true }) }, modifier = Modifier.fillMaxWidth().clickable { expanded = true }, colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = Zinc950, unfocusedContainerColor = Zinc950, focusedBorderColor = White, unfocusedBorderColor = Zinc700), shape = RoundedCornerShape(8.dp))
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.background(Zinc900)) {
-                metodos.forEach { metodo ->
-                    DropdownMenuItem(text = { Text(metodo, color = White) }, onClick = { metodoPago = metodo; expanded = false })
-                }
+                metodos.forEach { metodo -> DropdownMenuItem(text = { Text(metodo, color = White) }, onClick = { metodoPago = metodo; expanded = false }) }
             }
         }
-        
-        Button(onClick = { if (descripcion.isNotBlank() && metodoPago != null && monto.isNotBlank()) { onSave(Gasto(0, descripcion, metodoPago!!, monto.toInt(), fecha)); onCancel() } }, modifier = Modifier.fillMaxWidth().height(50.dp), colors = ButtonDefaults.buttonColors(containerColor = White, contentColor = Zinc950)) { Text("Guardar Gasto", fontWeight = FontWeight.Bold) }
+        Button(onClick = { try { if (descripcion.isNotBlank() && metodoPago != null && monto.isNotBlank()) { onSave(Gasto(0, descripcion, metodoPago!!, monto.toInt(), selectedDate.toString())); onCancel() } } catch (e: Exception) {} }, modifier = Modifier.fillMaxWidth().height(50.dp), colors = ButtonDefaults.buttonColors(containerColor = White, contentColor = Zinc950)) { Text("Guardar Gasto", fontWeight = FontWeight.Bold) }
     }
 }
 
 @Composable
-fun TablaGastos(gastos: List<Gasto>) {
+fun TablaGastos(gastos: List<Gasto>, onEliminarClick: (Gasto) -> Unit) {
     Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).border(1.dp, Zinc800, RoundedCornerShape(12.dp))) {
         Row(modifier = Modifier.fillMaxWidth().background(Zinc900).padding(12.dp)) {
             Text("Fecha", Modifier.weight(0.25f), color = Zinc500, fontSize = 11.sp, textAlign = TextAlign.Start)
             Text("Descripción", Modifier.weight(0.45f), color = Zinc500, fontSize = 11.sp, textAlign = TextAlign.Start)
             Text("Monto", Modifier.weight(0.3f), color = Zinc500, fontSize = 11.sp, textAlign = TextAlign.End)
         }
-        gastos.forEach { GastoRow(it) }
+        if (gastos.isEmpty()) { Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { Text("No hay gastos registrados", color = Zinc600, fontSize = 13.sp) } }
+        else { gastos.forEach { GastoRow(it, onEliminarClick) } }
     }
 }
 
 @Composable
-fun GastoRow(gasto: Gasto) {
+fun GastoRow(gasto: Gasto, onEliminarClick: (Gasto) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { expanded = !expanded }
-            .animateContentSize()
-            .background(if (expanded) Zinc800.copy(alpha = 0.3f) else Color.Transparent)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            val dateParts = gasto.fecha.split("-")
-            val formattedDate = if (dateParts.size == 3) "${dateParts[2]}/${dateParts[1]}/${dateParts[0].takeLast(2)}" else gasto.fecha
-            
+    Column(modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded }.animateContentSize().background(if (expanded) Zinc800.copy(alpha = 0.3f) else Color.Transparent)) {
+        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            val formattedDate = try { LocalDate.parse(gasto.fecha).format(DateTimeFormatter.ofPattern("dd/MM/yy")) } catch (e: Exception) { gasto.fecha }
             Text(formattedDate, Modifier.weight(0.25f), color = Zinc400, fontSize = 12.sp, textAlign = TextAlign.Start)
-            
-            Text(
-                text = gasto.descripcion,
-                modifier = Modifier.weight(0.45f),
-                color = White,
-                fontSize = 14.sp,
-                maxLines = if (expanded) Int.MAX_VALUE else 1,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Start
-            )
-            
+            Text(text = gasto.descripcion, modifier = Modifier.weight(0.45f), color = White, fontSize = 14.sp, maxLines = if (expanded) Int.MAX_VALUE else 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Start)
             Text(formatCLP(gasto.monto), Modifier.weight(0.3f), color = White, fontWeight = FontWeight.Bold, fontSize = 14.sp, textAlign = TextAlign.End)
         }
-
         if (expanded) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 12.dp, end = 12.dp, bottom = 14.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "ID: #${gasto.id}",
-                    color = Zinc600,
-                    fontSize = 10.sp,
-                    fontFamily = FontFamily.Monospace,
-                    modifier = Modifier.weight(1f)
-                )
-
-                // Cápsula del Método de pago ahora a la derecha
-                Surface(
-                    color = Zinc800,
-                    shape = RoundedCornerShape(4.dp)
-                ) {
-                    Text(
-                        text = gasto.metodoPago.uppercase(),
-                        color = Zinc400,
-                        fontSize = 10.sp,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp
-                    )
-                }
+            Row(modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 14.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { onEliminarClick(gasto) }, modifier = Modifier.size(24.dp)) { Icon(Icons.Default.Delete, null, tint = Red500.copy(alpha = 0.7f), modifier = Modifier.size(20.dp)) }
+                Surface(color = Zinc800, shape = RoundedCornerShape(4.dp)) { Text(text = gasto.metodoPago.uppercase(), color = Zinc400, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp) }
             }
         }
         HorizontalDivider(color = Zinc800.copy(alpha = 0.5f), thickness = 0.5.dp)
