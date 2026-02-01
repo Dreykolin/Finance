@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
@@ -25,12 +26,16 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
+import java.time.LocalDate
 
 // --- COLORES ---
 private val White = Color(0xFFFFFFFF)
@@ -40,7 +45,6 @@ private val Zinc700 = Color(0xFF3F3F46)
 private val Zinc800 = Color(0xFF27272A)
 private val Zinc900 = Color(0xFF18181B)
 private val Zinc950 = Color(0xFF09090B)
-private val Azure500 = Color(0xFF3B82F6)
 private val Red500 = Color(0xFFEF4444)
 
 @Composable
@@ -52,6 +56,7 @@ fun CuotasPieChart(
     strokeWidth: Dp = 12.dp,
     showPercentage: Boolean = true
 ) {
+    val accentColor = LocalAppAccentColor.current
     val progressTarget = if (cuotasTotales > 0) cuotasPagadas.toFloat() / cuotasTotales.toFloat() else 0f
     val progress by animateFloatAsState(
         targetValue = progressTarget,
@@ -64,7 +69,7 @@ fun CuotasPieChart(
             val radius = (this.size.width - strokeWidth.toPx()) / 2
             drawCircle(color = Zinc800, radius = radius, style = Stroke(width = strokeWidth.toPx()))
             drawArc(
-                color = Azure500,
+                color = accentColor,
                 startAngle = -90f,
                 sweepAngle = 360 * progress,
                 useCenter = false,
@@ -85,23 +90,36 @@ fun CuotasPieChart(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GestorCuotasScreen() {
-    var compras by remember {
-        mutableStateOf(listOf(
-            CompraCuotas(1, "MacBook Pro M3", "MacOnline", 12, 4, 180000, "2025-10-01"),
-            CompraCuotas(2, "iPhone 15 Pro", "Falabella", 24, 12, 65000, "2025-02-15"),
-            CompraCuotas(3, "Smart TV Samsung", "Paris", 6, 5, 85000, "2025-09-10"),
-            CompraCuotas(4, "Muebles Terraza", "Sodimac", 3, 1, 120000, "2026-01-05")
-        ))
-    }
+    val context = LocalContext.current
+    val accentColor = LocalAppAccentColor.current
+    val db = remember { AppDatabase.getDatabase(context) }
+    val dao = db.compraCuotasDao()
+    val scope = rememberCoroutineScope()
+    
+    val compras by dao.getAll().collectAsState(initial = emptyList())
 
     var selectedCompra by remember { mutableStateOf<CompraCuotas?>(null) }
     var showGlobalSummary by remember { mutableStateOf(false) }
     var showSheet by remember { mutableStateOf(false) }
+    var showAddDialog by remember { mutableStateOf(false) }
     var compraAEliminar by remember { mutableStateOf<CompraCuotas?>(null) }
     
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    // Diálogo de Confirmación
+    // Diálogo para Nueva Compra
+    if (showAddDialog) {
+        FormularioNuevaCompraDialog(
+            onDismiss = { showAddDialog = false },
+            onSave = { nuevaCompra ->
+                scope.launch {
+                    dao.insert(nuevaCompra)
+                    showAddDialog = false
+                }
+            }
+        )
+    }
+
+    // Diálogo de Confirmación para Eliminar
     if (compraAEliminar != null) {
         AlertDialog(
             onDismissRequest = { compraAEliminar = null },
@@ -110,9 +128,12 @@ fun GestorCuotasScreen() {
             text = { Text("¿Realmente quieres borrar \"${compraAEliminar?.producto}\"? Esta acción no se puede deshacer.", style = TextStyle(color = Zinc400)) },
             confirmButton = {
                 TextButton(onClick = { 
-                    compras = compras.filter { it.id != compraAEliminar!!.id }
-                    compraAEliminar = null
-                    showSheet = false
+                    val aBorrar = compraAEliminar!!
+                    scope.launch { 
+                        dao.delete(aBorrar)
+                        compraAEliminar = null
+                        showSheet = false
+                    }
                 }) { Text("Eliminar", color = Red500, fontWeight = FontWeight.Bold) }
             },
             dismissButton = {
@@ -139,7 +160,7 @@ fun GestorCuotasScreen() {
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Rounded.CreditCard, null, tint = Azure500, modifier = Modifier.size(24.dp))
+                        Icon(Icons.Rounded.CreditCard, null, tint = accentColor, modifier = Modifier.size(24.dp))
                         Spacer(modifier = Modifier.width(12.dp))
                         Text("Seguimiento", color = White, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
                     }
@@ -167,14 +188,16 @@ fun GestorCuotasScreen() {
 
             LazyColumn(contentPadding = PaddingValues(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.weight(1f)) {
                 item { Text("TUS PRODUCTOS", color = Zinc500, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp) }
-                items(compras) { compra ->
+                items(compras, key = { it.id }) { compra ->
                     CompraItemCard(compra = compra) {
                         selectedCompra = compra
                         showGlobalSummary = false
                         showSheet = true
                     }
                 }
-                item { BotonNuevaCompra() }
+                item { 
+                    BotonNuevaCompra { showAddDialog = true }
+                }
             }
         }
 
@@ -188,9 +211,18 @@ fun GestorCuotasScreen() {
                 if (showGlobalSummary) {
                     DetalleGlobalSheet(montoTotalActual, montoAbonadoActual, deudaPendienteActual, totalPagadas, totalCuotas)
                 } else if (selectedCompra != null) {
+                    // Buscamos la compra actualizada de la lista
+                    val currentCompra = compras.find { it.id == selectedCompra?.id } ?: selectedCompra!!
                     DetallePanelSheet(
-                        compra = selectedCompra!!,
-                        onEliminarClick = { compraAEliminar = it }
+                        compra = currentCompra,
+                        onEliminarClick = { compraAEliminar = it },
+                        onMarcarCuota = {
+                            if (currentCompra.cuotasPagadas < currentCompra.cuotasTotales) {
+                                scope.launch {
+                                    dao.update(currentCompra.copy(cuotasPagadas = currentCompra.cuotasPagadas + 1))
+                                }
+                            }
+                        }
                     )
                 }
             }
@@ -198,8 +230,123 @@ fun GestorCuotasScreen() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun FormularioNuevaCompraDialog(
+    onDismiss: () -> Unit,
+    onSave: (CompraCuotas) -> Unit
+) {
+    val accentColor = LocalAppAccentColor.current
+    var producto by remember { mutableStateOf("") }
+    var tienda by remember { mutableStateOf("") }
+    var cuotasTotales by remember { mutableStateOf("") }
+    var montoCuota by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Zinc900,
+        title = { Text("Nueva Compra", color = White, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = producto,
+                    onValueChange = { producto = it },
+                    label = { Text("Producto") },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = Zinc950,
+                        unfocusedContainerColor = Zinc950,
+                        focusedBorderColor = accentColor,
+                        cursorColor = accentColor,
+                        focusedTextColor = White,
+                        unfocusedTextColor = White,
+                        focusedLabelColor = accentColor
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                )
+                OutlinedTextField(
+                    value = tienda,
+                    onValueChange = { tienda = it },
+                    label = { Text("Tienda") },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = Zinc950,
+                        unfocusedContainerColor = Zinc950,
+                        focusedBorderColor = accentColor,
+                        cursorColor = accentColor,
+                        focusedTextColor = White,
+                        unfocusedTextColor = White,
+                        focusedLabelColor = accentColor
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = cuotasTotales,
+                        onValueChange = { if (it.all { c -> c.isDigit() }) cuotasTotales = it },
+                        label = { Text("Cuotas") },
+                        modifier = Modifier.weight(1f),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = Zinc950,
+                            unfocusedContainerColor = Zinc950,
+                            focusedBorderColor = accentColor,
+                            cursorColor = accentColor,
+                            focusedTextColor = White,
+                            unfocusedTextColor = White,
+                            focusedLabelColor = accentColor
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                    OutlinedTextField(
+                        value = montoCuota,
+                        onValueChange = { if (it.all { c -> c.isDigit() }) montoCuota = it },
+                        label = { Text("Valor Cuota") },
+                        modifier = Modifier.weight(1.5f),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = Zinc950,
+                            unfocusedContainerColor = Zinc950,
+                            focusedBorderColor = accentColor,
+                            cursorColor = accentColor,
+                            focusedTextColor = White,
+                            unfocusedTextColor = White,
+                            focusedLabelColor = accentColor
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (producto.isNotBlank() && tienda.isNotBlank() && cuotasTotales.isNotBlank() && montoCuota.isNotBlank()) {
+                        onSave(CompraCuotas(
+                            producto = producto,
+                            tienda = tienda,
+                            cuotasTotales = cuotasTotales.toInt(),
+                            cuotasPagadas = 0,
+                            montoCuota = montoCuota.toInt(),
+                            fechaInicio = LocalDate.now().toString()
+                        ))
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = White, contentColor = Zinc950),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("Guardar", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancelar", color = Zinc500) }
+        }
+    )
+}
+
 @Composable
 fun DetalleGlobalSheet(total: Int, abonado: Int, pendiente: Int, cPagadas: Int, cTotales: Int) {
+    val accentColor = LocalAppAccentColor.current
     Column(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 48.dp, top = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -214,7 +361,7 @@ fun DetalleGlobalSheet(total: Int, abonado: Int, pendiente: Int, cPagadas: Int, 
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             ResumenRow("Deuda Total Actual", formatCLP(total), White)
-            ResumenRow("Total Abonado", "+ ${formatCLP(abonado)}", Azure500)
+            ResumenRow("Total Abonado", "+ ${formatCLP(abonado)}", accentColor)
             HorizontalDivider(color = Zinc800, thickness = 1.dp)
             ResumenRow("Deuda Pendiente", formatCLP(pendiente), White, isBold = true)
         }
@@ -239,7 +386,8 @@ fun CompraItemCard(compra: CompraCuotas, onClick: () -> Unit) {
 }
 
 @Composable
-fun DetallePanelSheet(compra: CompraCuotas, onEliminarClick: (CompraCuotas) -> Unit) {
+fun DetallePanelSheet(compra: CompraCuotas, onEliminarClick: (CompraCuotas) -> Unit, onMarcarCuota: () -> Unit) {
+    val accentColor = LocalAppAccentColor.current
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 48.dp, top = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(compra.producto.uppercase(), color = White, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
         Text(compra.tienda, color = Zinc500, fontSize = 14.sp)
@@ -248,21 +396,22 @@ fun DetallePanelSheet(compra: CompraCuotas, onEliminarClick: (CompraCuotas) -> U
         Spacer(modifier = Modifier.height(32.dp))
         Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Zinc950).border(1.dp, Zinc800, RoundedCornerShape(16.dp)).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             ResumenRow("Total a Pagar", formatCLP(compra.cuotasTotales * compra.montoCuota), White)
-            ResumenRow("Monto de Cuota", formatCLP(compra.montoCuota), Azure500)
+            ResumenRow("Monto de Cuota", formatCLP(compra.montoCuota), accentColor)
             HorizontalDivider(color = Zinc800, thickness = 1.dp)
             ResumenRow("Deuda Restante", formatCLP((compra.cuotasTotales - compra.cuotasPagadas) * compra.montoCuota), White, isBold = true)
         }
         Spacer(modifier = Modifier.height(24.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Button(
-                onClick = { }, 
+                onClick = onMarcarCuota, 
                 colors = ButtonDefaults.buttonColors(containerColor = White, contentColor = Zinc950), 
                 shape = RoundedCornerShape(12.dp), 
-                modifier = Modifier.weight(1f).height(56.dp)
+                modifier = Modifier.weight(1f).height(56.dp),
+                enabled = compra.cuotasPagadas < compra.cuotasTotales
             ) {
                 Icon(Icons.Rounded.Check, null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Marcar cuota", fontWeight = FontWeight.Bold)
+                Text(if (compra.cuotasPagadas < compra.cuotasTotales) "Marcar cuota" else "Pagado", fontWeight = FontWeight.Bold)
             }
             
             IconButton(
@@ -276,8 +425,8 @@ fun DetallePanelSheet(compra: CompraCuotas, onEliminarClick: (CompraCuotas) -> U
 }
 
 @Composable
-fun BotonNuevaCompra() {
-    Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).border(2.dp, Zinc800, RoundedCornerShape(16.dp)).clickable { }.padding(vertical = 20.dp), contentAlignment = Alignment.Center) {
+fun BotonNuevaCompra(onClick: () -> Unit) {
+    Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).border(2.dp, Zinc800, RoundedCornerShape(16.dp)).clickable { onClick() }.padding(vertical = 20.dp), contentAlignment = Alignment.Center) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.Add, null, tint = Zinc500)
             Spacer(modifier = Modifier.width(8.dp))

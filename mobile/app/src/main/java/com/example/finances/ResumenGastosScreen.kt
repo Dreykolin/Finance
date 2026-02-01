@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -36,6 +37,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import androidx.compose.material.icons.filled.ArrowDropDown
+import kotlinx.coroutines.launch
 
 private val White = Color(0xFFFFFFFF)
 private val Zinc300 = Color(0xFFD4D4D8)
@@ -46,19 +48,7 @@ private val Zinc700 = Color(0xFF3F3F46)
 private val Zinc800 = Color(0xFF27272A)
 private val Zinc900 = Color(0xFF18181B)
 private val Zinc950 = Color(0xFF09090B)
-private val Azure500 = Color(0xFF3B82F6)
 private val Red500 = Color(0xFFEF4444)
-
-private val initialGastos = listOf(
-    Gasto(1, "Supermercado Jumbo - Compra del mes", "Tarjeta", 45000, "2026-01-10"),
-    Gasto(2, "Transporte Uber al centro", "Efectivo", 8000, "2026-01-11"),
-    Gasto(3, "Cine Hoyts - Estreno Batman", "Tarjeta", 12000, "2026-02-12"),
-    Gasto(4, "Farmacia Cruz Verde - Vitaminas", "Débito", 15000, "2026-02-13"),
-    Gasto(5, "Restaurante Italiano - Cena familiar", "Crédito", 38000, "2026-02-14"),
-    Gasto(6, "Gasolina Shell - Llenado estanque", "Débito", 32000, "2026-03-15"),
-    Gasto(7, "Internet Hogar - Plan 1GB", "Transferencia", 27000, "2026-03-16"),
-    Gasto(11, "Mantenimiento Auto - Cambio de Aceite", "Débito", 120000, "2026-06-15")
-)
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -68,7 +58,14 @@ fun ResumenGastosScreen(
     metodosVisibles: List<String>,
     onMetodosChanged: (List<String>) -> Unit
 ) {
-    var gastos by remember { mutableStateOf(initialGastos) }
+    val context = LocalContext.current
+    val accentColor = LocalAppAccentColor.current
+    val db = remember { AppDatabase.getDatabase(context) }
+    val dao = db.gastoDao()
+    val scope = rememberCoroutineScope()
+
+    val gastos by dao.getAll().collectAsState(initial = emptyList())
+    
     var mostrarTendencias by remember { mutableStateOf(false) }
     var mostrarMetodos by remember { mutableStateOf(false) }
     var showChartSettings by remember { mutableStateOf(false) }
@@ -96,7 +93,7 @@ fun ResumenGastosScreen(
                         onClick = { showChartSettings = true },
                         colors = IconButtonDefaults.iconButtonColors(containerColor = Zinc900)
                     ) {
-                        Icon(Icons.Default.Tune, null, tint = Azure500)
+                        Icon(Icons.Default.Tune, null, tint = accentColor)
                     }
                 }
             }
@@ -147,8 +144,8 @@ fun ResumenGastosScreen(
             item { 
                 ListaGastosSection(
                     gastos = gastos, 
-                    onAgregarGasto = { nuevo -> gastos = (gastos + nuevo.copy(id = (gastos.lastOrNull()?.id ?: 0) + 1)).sortedByDescending { it.fecha } },
-                    onEliminarGasto = { gasto -> gastos = gastos.filter { it.id != gasto.id } }
+                    onAgregarGasto = { nuevo -> scope.launch { dao.insert(nuevo) } },
+                    onEliminarGasto = { gasto -> scope.launch { dao.delete(gasto) } }
                 ) 
             }
         }
@@ -180,6 +177,7 @@ fun SettingsPanel(
     metodosSeleccionados: List<String>,
     onMetodosChanged: (List<String>) -> Unit
 ) {
+    val accentColor = LocalAppAccentColor.current
     var tempPresupuesto by remember { mutableStateOf(presupuestoActual.toString()) }
     val todosLosMetodos = listOf("Efectivo", "Tarjeta", "Débito", "Crédito", "Transferencia")
 
@@ -203,7 +201,15 @@ fun SettingsPanel(
                 prefix = { Text("$ ", color = Zinc500) },
                 modifier = Modifier.fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = Zinc950, unfocusedContainerColor = Zinc950, focusedBorderColor = Azure500),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = Zinc950,
+                    unfocusedContainerColor = Zinc950,
+                    focusedBorderColor = accentColor,
+                    focusedTextColor = White,
+                    unfocusedTextColor = White,
+                    focusedLabelColor = accentColor,
+                    cursorColor = accentColor
+                ),
                 shape = RoundedCornerShape(12.dp)
             )
         }
@@ -226,7 +232,7 @@ fun SettingsPanel(
                         },
                         label = { Text(metodo) },
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = Azure500,
+                            selectedContainerColor = accentColor,
                             selectedLabelColor = White,
                             containerColor = Zinc800,
                             labelColor = Zinc400
@@ -252,8 +258,10 @@ fun ChartContainer(title: String, content: @Composable () -> Unit) {
 
 @Composable
 fun ListaGastosSection(gastos: List<Gasto>, onAgregarGasto: (Gasto) -> Unit, onEliminarGasto: (Gasto) -> Unit) {
+    val accentColor = LocalAppAccentColor.current
     var mostrarFormulario by remember { mutableStateOf(false) }
     var gastoAEliminar by remember { mutableStateOf<Gasto?>(null) }
+    var verTodos by remember { mutableStateOf(false) }
 
     if (gastoAEliminar != null) {
         AlertDialog(
@@ -266,6 +274,8 @@ fun ListaGastosSection(gastos: List<Gasto>, onAgregarGasto: (Gasto) -> Unit, onE
         )
     }
 
+    val gastosAMostrar = if (verTodos) gastos else gastos.take(10)
+
     Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Zinc900).border(1.dp, Zinc800, RoundedCornerShape(12.dp)).padding(16.dp)) {
         Row(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("Lista de Gastos", color = White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
@@ -275,13 +285,25 @@ fun ListaGastosSection(gastos: List<Gasto>, onAgregarGasto: (Gasto) -> Unit, onE
         }
         if (mostrarFormulario) FormularioNuevoGasto(onAgregarGasto) { mostrarFormulario = false }
         Spacer(modifier = Modifier.height(16.dp))
-        TablaGastos(gastos, onEliminarClick = { gastoAEliminar = it })
+        TablaGastos(gastosAMostrar, onEliminarClick = { gastoAEliminar = it })
+        
+        if (gastos.size > 10) {
+            Spacer(modifier = Modifier.height(12.dp))
+            TextButton(
+                onClick = { verTodos = !verTodos },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.textButtonColors(contentColor = accentColor)
+            ) {
+                Text(if (verTodos) "Ver menos" else "Ver todos (${gastos.size})", fontWeight = FontWeight.Bold)
+            }
+        }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FormularioNuevoGasto(onSave: (Gasto) -> Unit, onCancel: () -> Unit) {
+    val accentColor = LocalAppAccentColor.current
     var descripcion by remember { mutableStateOf("") }
     var metodoPago by remember { mutableStateOf<String?>(null) }
     var monto by remember { mutableStateOf("") }
@@ -289,23 +311,110 @@ fun FormularioNuevoGasto(onSave: (Gasto) -> Unit, onCancel: () -> Unit) {
     var showDatePicker by remember { mutableStateOf(false) }
     val dateState = rememberDatePickerState(initialSelectedDateMillis = selectedDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli())
     if (showDatePicker) {
-        DatePickerDialog(onDismissRequest = { showDatePicker = false }, confirmButton = { TextButton(onClick = { dateState.selectedDateMillis?.let { selectedDate = Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate() }; showDatePicker = false }) { Text("OK", color = Azure500) } }, dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancelar") } }, colors = DatePickerDefaults.colors(containerColor = Zinc900)) { DatePicker(state = dateState) }
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = { TextButton(onClick = { dateState.selectedDateMillis?.let { selectedDate = Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate() }; showDatePicker = false }) { Text("OK", color = accentColor) } },
+            dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancelar") } },
+            colors = DatePickerDefaults.colors(
+                containerColor = Zinc900,
+                selectedDayContainerColor = accentColor,
+                todayContentColor = accentColor,
+                todayDateBorderColor = accentColor
+            )
+        ) { DatePicker(state = dateState) }
     }
     Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Zinc950).border(1.dp, Zinc700, RoundedCornerShape(12.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        OutlinedTextField(value = descripcion, onValueChange = { descripcion = it }, label = { Text("Descripción") }, modifier = Modifier.fillMaxWidth(), colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = Zinc950, unfocusedContainerColor = Zinc950, focusedBorderColor = White, unfocusedBorderColor = Zinc700, cursorColor = White), shape = RoundedCornerShape(8.dp))
+        OutlinedTextField(
+            value = descripcion,
+            onValueChange = { descripcion = it },
+            label = { Text("Descripción") },
+            modifier = Modifier.fillMaxWidth(),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = Zinc950,
+                unfocusedContainerColor = Zinc950,
+                focusedBorderColor = accentColor,
+                cursorColor = accentColor,
+                focusedTextColor = White,
+                unfocusedTextColor = White,
+                focusedLabelColor = accentColor,
+                unfocusedLabelColor = Zinc500
+            ),
+            shape = RoundedCornerShape(8.dp)
+        )
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            OutlinedTextField(value = monto, onValueChange = { monto = it.filter { char -> char.isDigit() } }, label = { Text("Monto") }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = Zinc950, unfocusedContainerColor = Zinc950), shape = RoundedCornerShape(8.dp))
-            OutlinedTextField(value = selectedDate.format(DateTimeFormatter.ofPattern("dd/MM/yy")), onValueChange = {}, readOnly = true, label = { Text("Fecha") }, trailingIcon = { IconButton(onClick = { showDatePicker = true }) { Icon(Icons.Default.CalendarMonth, null, tint = Zinc400) } }, modifier = Modifier.weight(1f).clickable { showDatePicker = true }, colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = Zinc950, unfocusedContainerColor = Zinc950, focusedBorderColor = Zinc700), shape = RoundedCornerShape(8.dp))
+            OutlinedTextField(
+                value = monto,
+                onValueChange = { monto = it.filter { char -> char.isDigit() } },
+                label = { Text("Monto") },
+                modifier = Modifier.weight(1f),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = Zinc950,
+                    unfocusedContainerColor = Zinc950,
+                    focusedTextColor = White,
+                    unfocusedTextColor = White,
+                    focusedBorderColor = accentColor,
+                    unfocusedBorderColor = Zinc700,
+                    focusedLabelColor = accentColor,
+                    unfocusedLabelColor = Zinc500,
+                    cursorColor = accentColor
+                ),
+                shape = RoundedCornerShape(8.dp)
+            )
+            OutlinedTextField(
+                value = selectedDate.format(DateTimeFormatter.ofPattern("dd/MM/yy")),
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("Fecha") },
+                trailingIcon = { IconButton(onClick = { showDatePicker = true }) { Icon(Icons.Default.CalendarMonth, null, tint = Zinc400) } },
+                modifier = Modifier.weight(1f).clickable { showDatePicker = true },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = Zinc950,
+                    unfocusedContainerColor = Zinc950,
+                    focusedBorderColor = Zinc700,
+                    focusedTextColor = White,
+                    unfocusedTextColor = White,
+                    focusedLabelColor = accentColor,
+                    unfocusedLabelColor = Zinc500
+                ),
+                shape = RoundedCornerShape(8.dp)
+            )
         }
         var expanded by remember { mutableStateOf(false) }
         val metodos = listOf("Efectivo", "Tarjeta", "Débito", "Crédito", "Transferencia")
         Box(modifier = Modifier.fillMaxWidth()) {
-            OutlinedTextField(value = metodoPago ?: "Seleccionar método...", onValueChange = {}, readOnly = true, label = { Text("Método de Pago") }, trailingIcon = { Icon(Icons.Filled.ArrowDropDown, null, Modifier.clickable { expanded = true }) }, modifier = Modifier.fillMaxWidth().clickable { expanded = true }, colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = Zinc950, unfocusedContainerColor = Zinc950, focusedBorderColor = White, unfocusedBorderColor = Zinc700), shape = RoundedCornerShape(8.dp))
+            OutlinedTextField(
+                value = metodoPago ?: "Seleccionar método...",
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("Método de Pago") },
+                trailingIcon = { Icon(Icons.Filled.ArrowDropDown, null, Modifier.clickable { expanded = true }) },
+                modifier = Modifier.fillMaxWidth().clickable { expanded = true },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = Zinc950,
+                    unfocusedContainerColor = Zinc950,
+                    focusedBorderColor = accentColor,
+                    unfocusedBorderColor = Zinc700,
+                    focusedTextColor = White,
+                    unfocusedTextColor = White,
+                    focusedLabelColor = accentColor,
+                    unfocusedLabelColor = Zinc500,
+                    cursorColor = accentColor
+                ),
+                shape = RoundedCornerShape(8.dp)
+            )
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.background(Zinc900)) {
                 metodos.forEach { metodo -> DropdownMenuItem(text = { Text(metodo, color = White) }, onClick = { metodoPago = metodo; expanded = false }) }
             }
         }
-        Button(onClick = { try { if (descripcion.isNotBlank() && metodoPago != null && monto.isNotBlank()) { onSave(Gasto(0, descripcion, metodoPago!!, monto.toInt(), selectedDate.toString())); onCancel() } } catch (e: Exception) {} }, modifier = Modifier.fillMaxWidth().height(50.dp), colors = ButtonDefaults.buttonColors(containerColor = White, contentColor = Zinc950)) { Text("Guardar Gasto", fontWeight = FontWeight.Bold) }
+        Button(
+            onClick = { try { if (descripcion.isNotBlank() && metodoPago != null && monto.isNotBlank()) { onSave(Gasto(0, descripcion, metodoPago!!, monto.toInt(), selectedDate.toString())); onCancel() } } catch (e: Exception) {} },
+            modifier = Modifier.fillMaxWidth().height(50.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = White, contentColor = Zinc950),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Text("Guardar Gasto", fontWeight = FontWeight.Bold)
+        }
     }
 }
 

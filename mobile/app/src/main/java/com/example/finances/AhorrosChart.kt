@@ -35,7 +35,6 @@ private val Zinc500 = Color(0xFF71717A)
 private val Zinc800 = Color(0xFF27272A)
 private val Zinc950 = Color(0xFF09090B)
 private val Red500 = Color(0xFFEF4444)
-private val Azure500 = Color(0xFF3B82F6)
 
 @OptIn(ExperimentalTextApi::class)
 @Composable
@@ -44,6 +43,8 @@ fun AhorrosChart(
     metaAhorro: Int = 500000,
     modifier: Modifier = Modifier.fillMaxWidth().height(300.dp)
 ) {
+    val accentColor = LocalAppAccentColor.current
+
     if (ahorros.isEmpty()) {
         Box(modifier = modifier, contentAlignment = Alignment.Center) {
             Text("No hay ahorros registrados.", color = Zinc500)
@@ -74,7 +75,6 @@ fun AhorrosChart(
     val (labels, data) = chartData
     val maxAhorro = data.maxOrNull() ?: 0f
     
-    // Lógica para que la meta siempre se vea arriba y el gráfico no se encoja demasiado
     val rawMaxY = max(maxAhorro, metaAhorro.toFloat())
     
     val stepCount = 4
@@ -185,14 +185,14 @@ fun AhorrosChart(
                         lineTo(points.first().x, graphHeight)
                         close()
                     }
-                    drawPath(fillPath, brush = Brush.verticalGradient(listOf(Azure500.copy(alpha = 0.2f), Color.Transparent), startY = 0f, endY = graphHeight))
-                    drawPath(path, color = Azure500, style = Stroke(3.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+                    drawPath(fillPath, brush = Brush.verticalGradient(listOf(accentColor.copy(alpha = 0.2f), Color.Transparent), startY = 0f, endY = graphHeight))
+                    drawPath(path, color = accentColor, style = Stroke(3.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
 
                     points.forEachIndexed { index, point ->
                         val isSelected = index == selectedIndex
                         val radius = if (isSelected) 8.dp.toPx() else 6.dp.toPx()
                         drawCircle(Zinc950, radius, point)
-                        drawCircle(if (isSelected) White else Azure500, radius, point, style = Stroke(if (isSelected) 3.dp.toPx() else 2.dp.toPx()))
+                        drawCircle(if (isSelected) White else accentColor, radius, point, style = Stroke(if (isSelected) 3.dp.toPx() else 2.dp.toPx()))
 
                         if (isSelected) {
                             val precise = formatCLP(data[index].toInt())

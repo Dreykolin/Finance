@@ -35,7 +35,6 @@ private val Zinc500 = Color(0xFF71717A)
 private val Zinc800 = Color(0xFF27272A)
 private val Zinc950 = Color(0xFF09090B)
 private val Red500 = Color(0xFFEF4444)
-private val Azure500 = Color(0xFF3B82F6) // Color principal de la App
 
 @OptIn(ExperimentalTextApi::class)
 @Composable
@@ -46,6 +45,8 @@ fun GastosChart(
         .fillMaxWidth()
         .height(300.dp)
 ) {
+    val accentColor = LocalAppAccentColor.current
+    
     if (gastos.isEmpty()) {
         Box(modifier = modifier, contentAlignment = Alignment.Center) {
             Text("No hay datos suficientes.", color = Zinc500)
@@ -212,7 +213,7 @@ fun GastosChart(
                             )
                         }
 
-                        // Relleno Gradiente y Línea en AZUL
+                        // Relleno Gradiente y Línea en COLOR DINÁMICO
                         val fillPath = Path().apply {
                             addPath(path)
                             lineTo(points.last().x, graphHeight)
@@ -222,25 +223,25 @@ fun GastosChart(
                         drawPath(
                             path = fillPath,
                             brush = Brush.verticalGradient(
-                                colors = listOf(Azure500.copy(alpha = 0.1f), Color.Transparent),
+                                colors = listOf(accentColor.copy(alpha = 0.1f), Color.Transparent),
                                 startY = 0f,
                                 endY = graphHeight
                             )
                         )
                         drawPath(
                             path = path,
-                            color = Azure500, // CAMBIO A AZUL
+                            color = accentColor,
                             style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                         )
 
-                        // Puntos en AZUL
+                        // Puntos en COLOR DINÁMICO
                         points.forEachIndexed { index, point ->
                             val isSelected = index == selectedIndex
                             val radius = if (isSelected) 8.dp.toPx() else 6.dp.toPx()
                             
                             drawCircle(Zinc950, radius = radius, center = point)
                             drawCircle(
-                                color = if (isSelected) White else Azure500, // CAMBIO A AZUL
+                                color = if (isSelected) White else accentColor,
                                 radius = radius,
                                 center = point,
                                 style = Stroke(if (isSelected) 3.dp.toPx() else 2.dp.toPx())
