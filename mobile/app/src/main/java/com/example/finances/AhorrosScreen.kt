@@ -164,7 +164,14 @@ fun AhorrosScreen() {
                 }
             }
 
-            item { ChartContainer("Crecimiento vs Meta") { AhorrosChart(ahorros = ahorros, metaAhorro = metaActiva) } }
+            item { 
+                ChartContainer(
+                    title = "Crecimiento vs Meta",
+                    onLongPress = { /* No reordenar en ahorros */ }
+                ) { 
+                    AhorrosChart(ahorros = ahorros, metaAhorro = metaActiva) 
+                } 
+            }
 
             item {
                 Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Zinc900).border(1.dp, Zinc800, RoundedCornerShape(12.dp)).padding(16.dp)) {
