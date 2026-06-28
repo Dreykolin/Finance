@@ -188,14 +188,21 @@ function dayXPos(fecha: string, months: string[]): number {
 function buildPts(vp: Vp, byMonth: Record<string,number>, byDay: Record<string,number>, months: string[]): ChartPt[] {
   const xRange = vp.xEnd - vp.xStart
   const showDays = xRange < 1.8
-  return showDays
-    ? Object.entries(byDay)
-        .map(([f, v]) => ({ key: f, x: dayXPos(f, months), value: v, label: f.slice(8) }))
-        .filter(p => p.x >= vp.xStart - 0.1 && p.x <= vp.xEnd + 0.1 && p.x >= 0)
-        .sort((a, b) => a.x - b.x)
-    : months
-        .map((m, i) => ({ key: m, x: i, value: byMonth[m], label: mesCorto(m) }))
-        .filter(p => p.x >= vp.xStart - 0.5 && p.x <= vp.xEnd + 0.5)
+  if (showDays) {
+    // Filtrar por índice de mes visible, no por posición x exacta
+    const firstMIdx = Math.floor(vp.xStart)
+    const lastMIdx  = Math.ceil(vp.xEnd)
+    return Object.entries(byDay)
+      .map(([f, v]) => ({ key: f, x: dayXPos(f, months), value: v, label: f.slice(8) }))
+      .filter(p => {
+        const mIdx = months.indexOf(p.key.slice(0, 7))
+        return mIdx >= firstMIdx && mIdx <= lastMIdx && p.x >= 0
+      })
+      .sort((a, b) => a.x - b.x)
+  }
+  return months
+    .map((m, i) => ({ key: m, x: i, value: byMonth[m], label: mesCorto(m) }))
+    .filter(p => p.x >= vp.xStart - 0.5 && p.x <= vp.xEnd + 0.5)
 }
 
 function renderChart(
@@ -310,7 +317,7 @@ function TendenciaChartInteractive({ gastos, presupuesto }: { gastos: Gasto[]; p
   const [vp, setVp] = useState<Vp>({ xStart: 0, xEnd: 0.5, yMin: 0, yMax: 100000 })
 
   const { byMonth, byDay, months } = buildChartData(gastos)
-  const origXMax = Math.max(months.length - 1, 0.5)
+  const origXMax = Math.max(months.length - 1, 1.0)
   const pts = buildPts(vp, byMonth, byDay, months)
 
   useEffect(() => {
@@ -318,7 +325,7 @@ function TendenciaChartInteractive({ gastos, presupuesto }: { gastos: Gasto[]; p
     const { byMonth: bm, months: ms } = buildChartData(gastos)
     if (!ms.length) return
     const { maxY } = niceScale(Math.max(...ms.map(m => bm[m]), presupuesto || 0, 1))
-    setVp({ xStart: 0, xEnd: Math.max(ms.length - 1, 0.5), yMin: 0, yMax: maxY })
+    setVp({ xStart: 0, xEnd: Math.max(ms.length - 1, 1.0), yMin: 0, yMax: maxY })
   }, [gastos.length, presupuesto])
 
   vpRef.current  = vp
