@@ -7,7 +7,7 @@ function mapGasto(r: any): Gasto {
     id:        r.id,
     descripcion: r.detalles,
     monto:     r.monto,
-    fecha:     r.fecha,
+    fecha:     r.fecha.slice(0, 10),
     metodoPago: r.metodo_pago ?? '',
   }
 }
