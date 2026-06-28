@@ -19,6 +19,8 @@ app.use(express.json())
 app.use(cookieParser())
 app.use(passport.initialize())
 
+app.get('/health', (_req, res) => res.json({ ok: true }))
+
 app.use('/auth',          authRoutes)
 app.use('/compras',       comprasRoutes)
 app.use('/cuotas',        cuotasRoutes)
