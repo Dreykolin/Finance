@@ -51,8 +51,8 @@ router.get('/google/callback',
 
     res.cookie('token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      secure: true,
+      sameSite: 'none', // cross-origin: Vercel (frontend) ↔ Coolify (backend)
       maxAge: 30 * 24 * 60 * 60 * 1000,
     })
     res.redirect(process.env.FRONTEND_URL!)
@@ -62,7 +62,7 @@ router.get('/google/callback',
 router.get('/me', requireAuth, (req, res) => { res.json(req.user) })
 
 router.post('/logout', (_req, res) => {
-  res.clearCookie('token')
+  res.clearCookie('token', { httpOnly: true, secure: true, sameSite: 'none' })
   res.json({ ok: true })
 })
 

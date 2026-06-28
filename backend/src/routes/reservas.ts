@@ -31,6 +31,16 @@ router.post('/', async (req, res) => {
   res.json(result.rows[0])
 })
 
+router.patch('/:id', async (req, res) => {
+  const { completada } = req.body
+  const { rows } = await pool.query(
+    'UPDATE reservas SET completada = $1 WHERE id = $2 AND id_usuario = $3 AND es_general = FALSE RETURNING *',
+    [completada, req.params.id, req.user!.id]
+  )
+  if (!rows[0]) { res.status(404).json({ error: 'No encontrado' }); return }
+  res.json(rows[0])
+})
+
 router.delete('/:id', async (req, res) => {
   const { rows } = await pool.query(
     'SELECT * FROM reservas WHERE id = $1 AND id_usuario = $2',

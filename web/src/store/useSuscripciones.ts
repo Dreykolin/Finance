@@ -1,31 +1,45 @@
 import { useState, useEffect } from 'react'
+import { api } from '../lib/api'
 import type { Suscripcion } from '../types'
 
-const KEY = 'fin_suscripciones'
+function mapSus(r: any): Suscripcion {
+  return {
+    id:     r.id,
+    nombre: r.nombre,
+    monto:  r.precio,
+    pagado: r.pagado,
+  }
+}
 
 export function useSuscripciones() {
-  const [suscripciones, setSuscripciones] = useState<Suscripcion[]>(() => {
-    try { return JSON.parse(localStorage.getItem(KEY) ?? '[]') }
-    catch { return [] }
-  })
+  const [suscripciones, setSuscripciones] = useState<Suscripcion[]>([])
 
   useEffect(() => {
-    localStorage.setItem(KEY, JSON.stringify(suscripciones))
-  }, [suscripciones])
+    api.get<any[]>('/suscripciones')
+      .then(data => setSuscripciones(data.map(mapSus)))
+      .catch(console.error)
+  }, [])
 
-  function agregar(s: Omit<Suscripcion, 'id'>) {
-    setSuscripciones(prev => [...prev, { ...s, id: Date.now() }])
+  async function agregar(s: Omit<Suscripcion, 'id'>) {
+    const created = await api.post<any>('/suscripciones', {
+      nombre: s.nombre,
+      precio: s.monto,
+    })
+    setSuscripciones(prev => [...prev, mapSus(created)])
   }
 
-  function eliminar(id: number) {
+  async function eliminar(id: number) {
+    await api.delete(`/suscripciones/${id}`)
     setSuscripciones(prev => prev.filter(s => s.id !== id))
   }
 
-  function togglePagado(id: number) {
-    setSuscripciones(prev => prev.map(s => s.id === id ? { ...s, pagado: !s.pagado } : s))
+  async function togglePagado(id: number) {
+    const updated = await api.post<any>(`/suscripciones/${id}/toggle`)
+    setSuscripciones(prev => prev.map(s => s.id === id ? mapSus(updated) : s))
   }
 
-  function resetearPagos() {
+  async function resetearPagos() {
+    await api.post('/suscripciones/reset')
     setSuscripciones(prev => prev.map(s => ({ ...s, pagado: false })))
   }
 

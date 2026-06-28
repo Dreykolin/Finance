@@ -51,8 +51,11 @@ export async function initDb() {
       id_usuario   INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
       nombre       TEXT NOT NULL,
       monto_meta   INTEGER,
+      completada   BOOLEAN NOT NULL DEFAULT FALSE,
       es_general   BOOLEAN NOT NULL DEFAULT FALSE
     );
+
+    ALTER TABLE reservas ADD COLUMN IF NOT EXISTS completada BOOLEAN NOT NULL DEFAULT FALSE;
 
     CREATE TABLE IF NOT EXISTS depositos_reservas (
       id          SERIAL PRIMARY KEY,

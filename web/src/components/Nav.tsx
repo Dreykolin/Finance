@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom'
-import { TrendingUp, CreditCard, PiggyBank, Repeat2 } from 'lucide-react'
+import { TrendingUp, CreditCard, PiggyBank, Repeat2, LogOut } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
 
 const tabs = [
   { to: '/gastos',        Icon: TrendingUp, label: 'Gastos'  },
@@ -9,6 +10,7 @@ const tabs = [
 ]
 
 export default function Nav() {
+  const { user, logout } = useAuth()
   return (
     <>
       {/* ── Mobile bottom bar ── */}
@@ -45,6 +47,17 @@ export default function Nav() {
             </NavLink>
           ))}
         </nav>
+
+        <div className="p-3 border-t border-zinc-800">
+          <p className="text-zinc-600 text-xs px-3 pb-2 truncate">{user?.correo}</p>
+          <button
+            onClick={logout}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-zinc-500 hover:text-red-400 hover:bg-zinc-900 font-semibold text-sm transition-colors"
+          >
+            <LogOut size={17} />
+            Cerrar sesión
+          </button>
+        </div>
       </aside>
     </>
   )
