@@ -7,13 +7,21 @@ import type { Gasto } from '../../types'
 
 const METODOS = ['Efectivo', 'Débito', 'Crédito', 'Transferencia']
 
-const METODO_COLOR: Record<string, string> = {
+const METODO_BADGE: Record<string, string> = {
   'Efectivo':      'bg-emerald-500/20 text-emerald-400',
   'Débito':        'bg-blue-500/20 text-blue-400',
   'Crédito':       'bg-purple-500/20 text-purple-400',
   'Transferencia': 'bg-orange-500/20 text-orange-400',
   '':              'bg-zinc-800 text-zinc-500',
 }
+
+const METODO_FILL: Record<string, string> = {
+  'Efectivo':      '#10b981',
+  'Débito':        '#3b82f6',
+  'Crédito':       '#8b5cf6',
+  'Transferencia': '#f97316',
+}
+const EXTRA_COLORS = ['#ec4899', '#14b8a6', '#eab308', '#6366f1']
 
 function getMes(offset: number) {
   const d = new Date()
@@ -44,6 +52,112 @@ function fmtMil(v: number) {
   return v >= 1000 ? `${Math.round(v / 1000)}mil` : String(Math.round(v))
 }
 
+// ── Donut chart ────────────────────────────────────────────────────────────
+function donutArc(cx: number, cy: number, R: number, r: number, a1: number, a2: number) {
+  const cos = Math.cos, sin = Math.sin
+  const large = a2 - a1 > Math.PI ? 1 : 0
+  const x1 = cx + R * cos(a1), y1 = cy + R * sin(a1)
+  const x2 = cx + R * cos(a2), y2 = cy + R * sin(a2)
+  const x3 = cx + r * cos(a2), y3 = cy + r * sin(a2)
+  const x4 = cx + r * cos(a1), y4 = cy + r * sin(a1)
+  return `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${R} ${R} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} L ${x3.toFixed(2)} ${y3.toFixed(2)} A ${r} ${r} 0 ${large} 0 ${x4.toFixed(2)} ${y4.toFixed(2)} Z`
+}
+
+interface DonutSlice { label: string; value: number; color: string }
+
+function DonutChart({ slices, total, label }: { slices: DonutSlice[]; total: number; label?: string }) {
+  const [active, setActive] = useState<number | null>(null)
+  const cx = 80, cy = 80, R = 68, r = 46
+  const gap = 0.03
+
+  let angle = -Math.PI / 2
+  const arcs = slices.map(s => {
+    const sweep = (s.value / total) * (2 * Math.PI) - gap
+    const a1 = angle + gap / 2
+    const a2 = a1 + sweep
+    angle += (s.value / total) * (2 * Math.PI)
+    return { ...s, a1, a2, pct: Math.round((s.value / total) * 100) }
+  })
+
+  const shown = active !== null ? arcs[active] : null
+
+  return (
+    <div className="flex items-center gap-4">
+      {/* Donut */}
+      <div className="flex-shrink-0">
+        <svg viewBox="0 0 160 160" width="140" height="140">
+          {arcs.map((arc, i) => (
+            <path key={arc.label} d={donutArc(cx, cy, active === i ? R + 5 : R, r, arc.a1, arc.a2)}
+              fill={arc.color} opacity={active !== null && active !== i ? 0.35 : 1}
+              style={{ transition: 'all 0.2s', cursor: 'pointer' }}
+              onClick={() => setActive(active === i ? null : i)} />
+          ))}
+          {/* Center label */}
+          <text x={cx} y={cy - 8} textAnchor="middle" fontSize="18" fontWeight="bold" fill="white">
+            {shown ? `${shown.pct}%` : ''}
+          </text>
+          <text x={cx} y={cy + 10} textAnchor="middle" fontSize="9" fill="#71717a">
+            {shown ? shown.label : label ?? ''}
+          </text>
+          <text x={cx} y={cy + 24} textAnchor="middle" fontSize="9" fill="#a1a1aa">
+            {shown ? formatCLP(shown.value) : ''}
+          </text>
+        </svg>
+      </div>
+
+      {/* Legend */}
+      <div className="flex-1 flex flex-col gap-2.5">
+        {arcs.map((arc, i) => (
+          <button key={arc.label} onClick={() => setActive(active === i ? null : i)}
+            className={`flex items-center gap-2.5 text-left transition-opacity ${active !== null && active !== i ? 'opacity-35' : ''}`}>
+            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: arc.color }} />
+            <span className="flex-1 text-xs text-zinc-300 font-medium">{arc.label}</span>
+            <span className="text-xs font-bold text-white">{arc.pct}%</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function MetodosDonut({ gastos, label }: { gastos: Gasto[]; label?: string }) {
+  const byMetodo: Record<string, number> = {}
+  gastos.filter(g => g.metodoPago).forEach(g => {
+    byMetodo[g.metodoPago] = (byMetodo[g.metodoPago] ?? 0) + g.monto
+  })
+  const entries = Object.entries(byMetodo).sort(([, a], [, b]) => b - a)
+  const total = entries.reduce((s, [, v]) => s + v, 0)
+
+  if (entries.length === 0 || total === 0) return (
+    <div className="py-10 flex items-center justify-center text-zinc-600 text-sm italic">Sin datos</div>
+  )
+
+  const slices: DonutSlice[] = entries.map(([m, v], i) => ({
+    label: m,
+    value: v,
+    color: METODO_FILL[m] ?? EXTRA_COLORS[i % EXTRA_COLORS.length],
+  }))
+
+  return (
+    <div className="flex flex-col gap-4">
+      <DonutChart slices={slices} total={total} label={label} />
+      {/* Totals row */}
+      <div className="border-t border-zinc-800 pt-3 flex flex-col gap-1.5">
+        {entries.map(([m, v]) => (
+          <div key={m} className="flex justify-between items-center">
+            <span className="text-zinc-500 text-xs">{m}</span>
+            <span className="text-white text-xs font-bold">{formatCLP(v)}</span>
+          </div>
+        ))}
+        <div className="flex justify-between items-center pt-1 border-t border-zinc-800 mt-1">
+          <span className="text-zinc-400 text-xs font-bold">Total</span>
+          <span className="text-white text-xs font-bold">{formatCLP(total)}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Tendencia Mensual ──────────────────────────────────────────────────────
 function TendenciaChart({ gastos, presupuesto }: { gastos: Gasto[]; presupuesto: number }) {
   const [tooltip, setTooltip] = useState<number | null>(null)
@@ -63,8 +177,7 @@ function TendenciaChart({ gastos, presupuesto }: { gastos: Gasto[]; presupuesto:
 
   const PL = 52, PB = 28, PT = 16, PR = 12
   const W = 320, H = 200
-  const gW = W - PL - PR
-  const gH = H - PT - PB
+  const gW = W - PL - PR, gH = H - PT - PB
 
   const toX = (i: number) => PL + (months.length === 1 ? gW / 2 : (i / (months.length - 1)) * gW)
   const toY = (v: number) => PT + (1 - v / maxY) * gH
@@ -74,108 +187,15 @@ function TendenciaChart({ gastos, presupuesto }: { gastos: Gasto[]; presupuesto:
   const budgetY = presupuesto > 0 ? toY(presupuesto) : null
 
   return (
-    <div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
-        <defs>
-          <linearGradient id="tGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.25" />
-            <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-
-        {/* Y axis grid + labels */}
-        {Array.from({ length: steps + 1 }, (_, i) => {
-          const v = step * i
-          const y = toY(v)
-          return (
-            <g key={i}>
-              <line x1={PL} y1={y} x2={W - PR} y2={y} stroke="white" strokeOpacity="0.05" strokeWidth="1" />
-              <text x={PL - 8} y={y + 4} textAnchor="end" fontSize="9" fill="#71717a">{fmtMil(v)}</text>
-            </g>
-          )
-        })}
-
-        {/* Budget line */}
-        {budgetY !== null && (
-          <g>
-            <line x1={PL} y1={budgetY} x2={W - PR} y2={budgetY}
-              stroke="#ef4444" strokeWidth="1.5" strokeDasharray="6 5" strokeOpacity="0.6" />
-            <text x={W - PR - 2} y={budgetY - 4} textAnchor="end" fontSize="9" fill="#ef4444" fontWeight="bold">
-              LÍMITE
-            </text>
-          </g>
-        )}
-
-        {/* Area + line */}
-        <path d={areaD} fill="url(#tGrad)" />
-        <path d={pathD} fill="none" stroke="#8b5cf6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-
-        {/* Points + X labels */}
-        {months.map((m, i) => {
-          const x = toX(i), y = toY(values[i])
-          const isSelected = tooltip === i
-          return (
-            <g key={m} onClick={() => setTooltip(isSelected ? null : i)} style={{ cursor: 'pointer' }}>
-              {/* X label */}
-              <text x={x} y={H - 6} textAnchor="middle" fontSize="10" fill="#a1a1aa" fontWeight="bold">
-                {mesCorto(m)}
-              </text>
-              {/* Dot */}
-              <circle cx={x} cy={y} r={isSelected ? 7 : 5} fill="#09090b" />
-              <circle cx={x} cy={y} r={isSelected ? 7 : 5} fill="none"
-                stroke={isSelected ? 'white' : '#8b5cf6'}
-                strokeWidth={isSelected ? 2.5 : 2} />
-              {/* Tooltip */}
-              {isSelected && (
-                <g>
-                  <rect x={x - 38} y={y - 30} width="76" height="20" rx="5" fill="#27272a" />
-                  <text x={x} y={y - 16} textAnchor="middle" fontSize="11" fill="white" fontWeight="bold">
-                    {formatCLP(values[i])}
-                  </text>
-                </g>
-              )}
-            </g>
-          )
-        })}
-      </svg>
-    </div>
-  )
-}
-
-// ── Distribución de Métodos ────────────────────────────────────────────────
-function MetodosChart({ gastos }: { gastos: Gasto[] }) {
-  const byMetodo: Record<string, number> = {}
-  gastos.filter(g => g.metodoPago).forEach(g => {
-    byMetodo[g.metodoPago] = (byMetodo[g.metodoPago] ?? 0) + g.monto
-  })
-  const entries = Object.entries(byMetodo).sort(([, a], [, b]) => b - a)
-
-  if (entries.length === 0) return (
-    <div className="h-48 flex items-center justify-center text-zinc-600 text-sm italic">Sin datos de métodos</div>
-  )
-
-  const maxVal = Math.max(...entries.map(([, v]) => v))
-  const { maxY, step } = niceScale(maxVal)
-  const steps = Math.round(maxY / step)
-
-  const PL = 52, PB = 28, PT = 16, PR = 24
-  const W = 320, H = 200
-  const gW = W - PL - PR
-  const gH = H - PT - PB
-
-  const barSpacing = 24
-  const barW = Math.min(((gW - barSpacing * (entries.length - 1)) / entries.length), 60)
-  const totalW = barW * entries.length + barSpacing * (entries.length - 1)
-  const startX = PL + (gW - totalW) / 2
-
-  const toY = (v: number) => PT + (1 - v / maxY) * gH
-
-  return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
-      {/* Y axis grid + labels */}
+      <defs>
+        <linearGradient id="tGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.25" />
+          <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0" />
+        </linearGradient>
+      </defs>
       {Array.from({ length: steps + 1 }, (_, i) => {
-        const v = step * i
-        const y = toY(v)
+        const v = step * i, y = toY(v)
         return (
           <g key={i}>
             <line x1={PL} y1={y} x2={W - PR} y2={y} stroke="white" strokeOpacity="0.05" strokeWidth="1" />
@@ -183,18 +203,27 @@ function MetodosChart({ gastos }: { gastos: Gasto[] }) {
           </g>
         )
       })}
-
-      {/* Bars */}
-      {entries.map(([metodo, val], i) => {
-        const x = startX + i * (barW + barSpacing)
-        const barH = (val / maxY) * gH
-        const y = PT + gH - barH
+      {budgetY !== null && (
+        <g>
+          <line x1={PL} y1={budgetY} x2={W - PR} y2={budgetY} stroke="#ef4444" strokeWidth="1.5" strokeDasharray="6 5" strokeOpacity="0.6" />
+          <text x={W - PR - 2} y={budgetY - 4} textAnchor="end" fontSize="9" fill="#ef4444" fontWeight="bold">LÍMITE</text>
+        </g>
+      )}
+      <path d={areaD} fill="url(#tGrad)" />
+      <path d={pathD} fill="none" stroke="#8b5cf6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+      {months.map((m, i) => {
+        const x = toX(i), y = toY(values[i]), sel = tooltip === i
         return (
-          <g key={metodo}>
-            <rect x={x} y={y} width={barW} height={barH} rx="5" fill="white" fillOpacity="0.85" />
-            <text x={x + barW / 2} y={H - 6} textAnchor="middle" fontSize="10" fill="white" fontWeight="bold">
-              {metodo.slice(0, 6)}
-            </text>
+          <g key={m} onClick={() => setTooltip(sel ? null : i)} style={{ cursor: 'pointer' }}>
+            <text x={x} y={H - 6} textAnchor="middle" fontSize="10" fill="#a1a1aa" fontWeight="bold">{mesCorto(m)}</text>
+            <circle cx={x} cy={y} r={sel ? 7 : 5} fill="#09090b" />
+            <circle cx={x} cy={y} r={sel ? 7 : 5} fill="none" stroke={sel ? 'white' : '#8b5cf6'} strokeWidth={sel ? 2.5 : 2} />
+            {sel && (
+              <g>
+                <rect x={x - 38} y={y - 30} width="76" height="20" rx="5" fill="#27272a" />
+                <text x={x} y={y - 16} textAnchor="middle" fontSize="11" fill="white" fontWeight="bold">{formatCLP(values[i])}</text>
+              </g>
+            )}
           </g>
         )
       })}
@@ -221,6 +250,12 @@ export default function MobileGastos() {
   const porDia: Record<string, Gasto[]> = {}
   delMes.forEach(g => { porDia[g.fecha] = [...(porDia[g.fecha] ?? []), g] })
   const dias = Object.keys(porDia).sort((a, b) => b.localeCompare(a))
+
+  // Rango de fechas del mes con datos
+  const fechasMes = delMes.map(g => g.fecha).sort()
+  const rangoMes = fechasMes.length > 0
+    ? `${formatFecha(fechasMes[0])} – ${formatFecha(fechasMes[fechasMes.length - 1])}`
+    : null
 
   function diaLabel(fecha: string) {
     const hoy  = new Date().toISOString().slice(0, 10)
@@ -261,10 +296,7 @@ export default function MobileGastos() {
       <div className="flex border-b border-zinc-900 mt-5">
         {(['analisis', 'historial'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
-            className={`flex-1 py-3 text-xs font-extrabold tracking-widest uppercase transition-colors relative ${
-              tab === t ? 'text-accent' : 'text-zinc-500'
-            }`}
-          >
+            className={`flex-1 py-3 text-xs font-extrabold tracking-widest uppercase transition-colors relative ${tab === t ? 'text-accent' : 'text-zinc-500'}`}>
             {t === 'analisis' ? 'Análisis' : 'Historial'}
             {tab === t && <span className="absolute bottom-0 inset-x-0 h-0.5 bg-accent" />}
           </button>
@@ -284,12 +316,34 @@ export default function MobileGastos() {
             </div>
           </div>
 
-          {/* Distribución métodos */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl py-5">
-            <p className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-widest px-6 mb-4">Distribución de Métodos</p>
-            <div className="px-2">
-              <MetodosChart gastos={gastos} />
+          {/* Distribución universal */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+            <p className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-widest mb-1">Distribución de Métodos</p>
+            <p className="text-zinc-600 text-[10px] mb-4">Histórico total</p>
+            <MetodosDonut gastos={gastos} label="histórico" />
+          </div>
+
+          {/* Distribución mensual */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+            <div className="flex items-start justify-between mb-1">
+              <p className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-widest">Métodos del Mes</p>
+              <div className="flex items-center gap-1">
+                <button onClick={() => setMesOffset(v => v - 1)}
+                  className="w-6 h-6 flex items-center justify-center rounded-lg text-zinc-500 active:bg-zinc-800">
+                  <ChevronLeft size={14} />
+                </button>
+                <span className="text-zinc-400 text-[10px] font-bold capitalize">{mesNombre(mesActual)}</span>
+                <button onClick={() => setMesOffset(v => Math.min(v + 1, 0))} disabled={mesOffset === 0}
+                  className="w-6 h-6 flex items-center justify-center rounded-lg text-zinc-500 active:bg-zinc-800 disabled:opacity-30">
+                  <ChevronRight size={14} />
+                </button>
+              </div>
             </div>
+            {rangoMes
+              ? <p className="text-zinc-600 text-[10px] mb-4">{rangoMes}</p>
+              : <p className="text-zinc-600 text-[10px] mb-4">Sin gastos este mes</p>
+            }
+            <MetodosDonut gastos={delMes} label={mesNombre(mesActual)} />
           </div>
         </div>
       )}
@@ -298,7 +352,6 @@ export default function MobileGastos() {
       {tab === 'historial' && (
         <div className="flex-1 flex flex-col">
           <div className="px-6 pt-5 pb-4 flex flex-col gap-4">
-            {/* Mes selector */}
             <div className="flex items-center justify-between">
               <button onClick={() => setMesOffset(v => v - 1)}
                 className="w-9 h-9 flex items-center justify-center rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 active:bg-zinc-800">
@@ -311,7 +364,6 @@ export default function MobileGastos() {
               </button>
             </div>
 
-            {/* Total */}
             <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
               <p className="text-zinc-500 text-xs font-bold uppercase tracking-wider mb-1">Total del mes</p>
               <p className="text-3xl font-extrabold text-white">{formatCLP(totalMes)}</p>
@@ -329,7 +381,6 @@ export default function MobileGastos() {
               )}
             </div>
 
-            {/* Section header */}
             <div className="flex items-center justify-between">
               <p className="text-[11px] font-extrabold text-zinc-500 uppercase tracking-widest">Movimientos</p>
               <button onClick={() => setShowForm(true)}
@@ -339,7 +390,6 @@ export default function MobileGastos() {
             </div>
           </div>
 
-          {/* List */}
           <div className="flex-1 px-6 pb-28 flex flex-col gap-5">
             {dias.length === 0 && (
               <div className="py-10 text-center text-zinc-600 text-sm">Sin movimientos este mes</div>
@@ -366,12 +416,10 @@ export default function MobileGastos() {
         </button>
       )}
 
-      {/* Add form */}
       <Modal open={showForm} onClose={() => setShowForm(false)} title="Nuevo Gasto">
         <FormGasto onSave={g => { agregar(g); setShowForm(false) }} />
       </Modal>
 
-      {/* Confirm delete */}
       <Modal open={confirmId !== null} onClose={() => setConfirmId(null)}>
         <div className="flex flex-col gap-4">
           <h2 className="font-bold text-base">¿Eliminar gasto?</h2>
@@ -382,7 +430,6 @@ export default function MobileGastos() {
         </div>
       </Modal>
 
-      {/* Presupuesto */}
       <Modal open={showSettings} onClose={() => setShowSettings(false)} title="Presupuesto mensual">
         <div className="flex flex-col gap-4">
           <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-700 rounded-2xl px-4 py-3.5 focus-within:border-accent transition-colors">
@@ -411,7 +458,7 @@ function GastoRow({ g, onDelete }: { g: Gasto; onDelete: () => void }) {
           <button onClick={e => { e.stopPropagation(); onDelete() }} className="text-red-500/70 active:text-red-400">
             <Trash2 size={18} />
           </button>
-          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${METODO_COLOR[g.metodoPago] ?? METODO_COLOR['']}`}>
+          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${METODO_BADGE[g.metodoPago] ?? METODO_BADGE['']}`}>
             {g.metodoPago.toUpperCase() || 'SIN MÉTODO'}
           </span>
         </div>
