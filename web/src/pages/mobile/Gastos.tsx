@@ -215,7 +215,7 @@ function renderChart(
   const pathPts = pts.map(p => ({ x: toSvgX(p.x), y: toSvgY(p.value) }))
   const pathD = pathPts.map((p, j) => `${j === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ')
   const areaD = pathPts.length > 1
-    ? `${pathD} L ${pathPts.at(-1)!.x.toFixed(1)} ${(PT+gH).toFixed(1)} L ${pathPts[0].x.toFixed(1)} ${(PT+gH).toFixed(1)} Z`
+    ? `${pathD} L ${pathPts[pathPts.length-1].x.toFixed(1)} ${(PT+gH).toFixed(1)} L ${pathPts[0].x.toFixed(1)} ${(PT+gH).toFixed(1)} Z`
     : ''
   const budgetY = presupuesto > 0 && presupuesto >= vp.yMin && presupuesto <= vp.yMax ? toSvgY(presupuesto) : null
 
