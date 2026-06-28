@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Settings, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useGastos } from '../../store/useGastos'
 import { formatCLP, formatFecha } from '../../lib/format'
@@ -166,6 +166,7 @@ function TendenciaChart({ gastos, presupuesto }: { gastos: Gasto[]; presupuesto:
   const svgRef   = useRef<SVGSVGElement>(null)
   const gesture  = useRef<GestureRef | null>(null)
   const [tooltip, setTooltip] = useState<number | null>(null)
+  const vpRef    = useRef<Vp | null>(null)  // mirror of vp for use inside event listeners
 
   const byMonth: Record<string, number> = {}
   gastos.forEach(g => { byMonth[g.fecha.slice(0, 7)] = (byMonth[g.fecha.slice(0, 7)] ?? 0) + g.monto })
@@ -226,89 +227,88 @@ function TendenciaChart({ gastos, presupuesto }: { gastos: Gasto[]; presupuesto:
     return Math.hypot(a[0] - b[0], a[1] - b[1])
   }
 
-  function onTouchStart(e: React.TouchEvent) {
-    e.preventDefault()
-    setTooltip(null)
-    const ts = Array.from(e.touches).map(t => [t.clientX, t.clientY] as [number, number])
-    gesture.current = { vp: { ...vp }, touches: ts }
-  }
+  // Keep vpRef in sync so imperative listeners can read current vp
+  vpRef.current = vp
 
-  function onTouchMove(e: React.TouchEvent) {
-    e.preventDefault()
-    if (!gesture.current) return
-    const { vp: sv, touches: st } = gesture.current
-    const ct = Array.from(e.touches).map(t => [t.clientX, t.clientY] as [number, number])
-    const r  = svgRef.current?.getBoundingClientRect()
-    if (!r) return
-    const toSvgDelta = (dx: number, dy: number) => [dx / r.width * W, dy / r.height * H]
+  useEffect(() => {
+    const el = svgRef.current
+    if (!el) return
 
-    if (ct.length === 1) {
-      // ── Pan ──
-      const [dsx, dsy] = toSvgDelta(ct[0][0] - st[0][0], ct[0][1] - st[0][1])
-      const xRange = sv.xEnd - sv.xStart
-      const yRange = sv.yMax - sv.yMin
-      const dDataX = -(dsx / gW) * xRange
-      const dDataY =  (dsy / gH) * yRange
-
-      let xs = sv.xStart + dDataX
-      let xe = sv.xEnd   + dDataX
-      if (xs < 0)                    { xs = 0; xe = xRange }
-      if (xe > months.length - 0.5)  { xe = months.length - 0.5; xs = xe - xRange }
-
-      let ym = Math.max(0, sv.yMin + dDataY)
-      const yMx = ym + yRange
-      setVp({ xStart: xs, xEnd: xe, yMin: ym, yMax: yMx })
-
-    } else if (ct.length >= 2) {
-      // ── Pinch zoom ──
-      const sd = dist(st[0], st[1])
-      const cd = dist(ct[0], ct[1])
-      if (sd === 0) return
-      const scale = sd / cd  // >1 zoom in, <1 zoom out
-
-      // Pinch center in SVG coords (from start touches)
-      const [pcx, pcy] = clientToSvg(
-        (st[0][0] + st[1][0]) / 2,
-        (st[0][1] + st[1][1]) / 2,
-      )
-      const [pdx, pdy] = svgToData(pcx, pcy, sv)
-
-      // New ranges scaled around pinch center
-      const xRange = Math.min(Math.max((sv.xEnd - sv.xStart) * scale, 0.5), months.length)
-      const yRange = Math.max((sv.yMax - sv.yMin) * scale, 10000)
-
-      const fracX = (pdx - sv.xStart) / (sv.xEnd - sv.xStart)
-      const fracY = (sv.yMax - pdy)   / (sv.yMax  - sv.yMin)
-
-      let xs = pdx - fracX * xRange
-      let xe = xs  + xRange
-      if (xs < 0)                   { xs = 0; xe = xRange }
-      if (xe > months.length - 0.5) { xe = months.length - 0.5; xs = xe - xRange }
-
-      let yMx = pdy + fracY * yRange
-      let ym  = Math.max(0, yMx - yRange)
-      yMx = ym + yRange
-
-      setVp({ xStart: xs, xEnd: xe, yMin: ym, yMax: yMx })
+    function onStart(e: TouchEvent) {
+      e.preventDefault()
+      setTooltip(null)
+      const ts = Array.from(e.touches).map(t => [t.clientX, t.clientY] as [number, number])
+      gesture.current = { vp: { ...vpRef.current! }, touches: ts }
     }
-  }
 
-  function onTouchEnd(e: React.TouchEvent) {
-    if (e.touches.length === 0) { gesture.current = null; return }
-    // Reset baseline for remaining fingers
-    const ts = Array.from(e.touches).map(t => [t.clientX, t.clientY] as [number, number])
-    gesture.current = { vp: { ...vp }, touches: ts }
-  }
+    function onMove(e: TouchEvent) {
+      e.preventDefault()
+      if (!gesture.current || !vpRef.current) return
+      const { vp: sv, touches: st } = gesture.current
+      const ct = Array.from(e.touches).map(t => [t.clientX, t.clientY] as [number, number])
+      const r  = el.getBoundingClientRect()
+      if (!r.width) return
+
+      if (ct.length === 1) {
+        const dsx = (ct[0][0] - st[0][0]) / r.width  * W
+        const dsy = (ct[0][1] - st[0][1]) / r.height * H
+        const xRange = sv.xEnd - sv.xStart
+        const yRange = sv.yMax - sv.yMin
+        const dDataX = -(dsx / gW) * xRange
+        const dDataY =  (dsy / gH) * yRange
+
+        let xs = sv.xStart + dDataX, xe = sv.xEnd + dDataX
+        if (xs < 0)                   { xs = 0; xe = xRange }
+        if (xe > months.length - 0.5) { xe = months.length - 0.5; xs = xe - xRange }
+        const ym = Math.max(0, sv.yMin + dDataY)
+        setVp({ xStart: xs, xEnd: xe, yMin: ym, yMax: ym + yRange })
+
+      } else if (ct.length >= 2) {
+        const sd = dist(st[0], st[1]), cd = dist(ct[0], ct[1])
+        if (sd === 0) return
+        const scale = sd / cd
+
+        const cx = (st[0][0] + st[1][0]) / 2, cy = (st[0][1] + st[1][1]) / 2
+        const svgCx = (cx - r.left) / r.width  * W
+        const svgCy = (cy - r.top)  / r.height * H
+        const [pdx, pdy] = svgToData(svgCx, svgCy, sv)
+
+        const xRange = Math.min(Math.max((sv.xEnd - sv.xStart) * scale, 0.5), months.length)
+        const yRange = Math.max((sv.yMax - sv.yMin) * scale, 10000)
+        const fracX  = (pdx - sv.xStart) / (sv.xEnd - sv.xStart)
+        const fracY  = (sv.yMax - pdy)   / (sv.yMax  - sv.yMin)
+
+        let xs = pdx - fracX * xRange, xe = xs + xRange
+        if (xs < 0)                   { xs = 0; xe = xRange }
+        if (xe > months.length - 0.5) { xe = months.length - 0.5; xs = xe - xRange }
+        let yMx = pdy + fracY * yRange, ym = Math.max(0, yMx - yRange)
+        setVp({ xStart: xs, xEnd: xe, yMin: ym, yMax: ym + yRange })
+      }
+    }
+
+    function onEnd(e: TouchEvent) {
+      if (e.touches.length === 0) { gesture.current = null; return }
+      const ts = Array.from(e.touches).map(t => [t.clientX, t.clientY] as [number, number])
+      gesture.current = { vp: { ...vpRef.current! }, touches: ts }
+    }
+
+    el.addEventListener('touchstart', onStart, { passive: false })
+    el.addEventListener('touchmove',  onMove,  { passive: false })
+    el.addEventListener('touchend',   onEnd,   { passive: false })
+    return () => {
+      el.removeEventListener('touchstart', onStart)
+      el.removeEventListener('touchmove',  onMove)
+      el.removeEventListener('touchend',   onEnd)
+    }
+  }, [months.length])  // re-attach only if month count changes
 
   return (
-    <div style={{ touchAction: 'none' }}>
+    <div>
       <svg
         ref={svgRef}
         viewBox={`0 0 ${W} ${H}`}
         className="w-full select-none"
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
+        style={{ touchAction: 'none' }}
       >
         <defs>
           <linearGradient id="tGrad" x1="0" y1="0" x2="0" y2="1">
