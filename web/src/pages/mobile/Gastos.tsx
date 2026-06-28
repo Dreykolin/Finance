@@ -163,27 +163,30 @@ interface Vp { xStart: number; xEnd: number; yMin: number; yMax: number }
 interface GestureRef { vp: Vp; touches: [number, number][] }
 
 function TendenciaChart({ gastos, presupuesto }: { gastos: Gasto[]; presupuesto: number }) {
-  const svgRef   = useRef<SVGSVGElement>(null)
-  const gesture  = useRef<GestureRef | null>(null)
+  // ── ALL hooks first (no early returns before hooks) ──
+  const svgRef  = useRef<SVGSVGElement>(null)
+  const gesture = useRef<GestureRef | null>(null)
+  const vpRef   = useRef<Vp | null>(null)
   const [tooltip, setTooltip] = useState<number | null>(null)
-  const vpRef    = useRef<Vp | null>(null)  // mirror of vp for use inside event listeners
+  const [vp, setVp] = useState<Vp>({ xStart: 0, xEnd: 0.5, yMin: 0, yMax: 100000 })
 
+  // Compute data (no hooks below this line until useEffect)
   const byMonth: Record<string, number> = {}
   gastos.forEach(g => { byMonth[g.fecha.slice(0, 7)] = (byMonth[g.fecha.slice(0, 7)] ?? 0) + g.monto })
   const months = Object.keys(byMonth).sort()
+  const values = months.map(m => byMonth[m])
 
-  if (months.length === 0) return (
-    <div className="h-48 flex items-center justify-center text-zinc-600 text-sm italic">No hay datos suficientes</div>
-  )
-
-  const values   = months.map(m => byMonth[m])
-  const dataMaxY = Math.max(...values, presupuesto || 0)
-  const { maxY: initMaxY } = niceScale(dataMaxY)
-
-  const [vp, setVp] = useState<Vp>({
-    xStart: 0, xEnd: Math.max(months.length - 1, 0.5),
-    yMin: 0,   yMax: initMaxY,
-  })
+  // Reset viewport to show all data when gastos load or change
+  useEffect(() => {
+    if (gastos.length === 0) return
+    const byM: Record<string, number> = {}
+    gastos.forEach(g => { byM[g.fecha.slice(0, 7)] = (byM[g.fecha.slice(0, 7)] ?? 0) + g.monto })
+    const ms = Object.keys(byM).sort()
+    if (ms.length === 0) return
+    const vals = ms.map(m => byM[m])
+    const { maxY } = niceScale(Math.max(...vals, presupuesto || 0, 1))
+    setVp({ xStart: 0, xEnd: Math.max(ms.length - 1, 0.5), yMin: 0, yMax: maxY })
+  }, [gastos.length, presupuesto])
 
   const PL = 52, PB = 28, PT = 16, PR = 12
   const W = 320, H = 200
@@ -301,6 +304,10 @@ function TendenciaChart({ gastos, presupuesto }: { gastos: Gasto[]; presupuesto:
       el.removeEventListener('touchend',   onEnd)
     }
   }, [months.length])  // re-attach only if month count changes
+
+  if (months.length === 0) return (
+    <div className="h-48 flex items-center justify-center text-zinc-600 text-sm italic">No hay datos suficientes</div>
+  )
 
   return (
     <div>
