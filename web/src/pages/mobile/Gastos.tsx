@@ -231,6 +231,74 @@ function TendenciaChart({ gastos, presupuesto }: { gastos: Gasto[]; presupuesto:
   )
 }
 
+// ── Donut slider (histórico + mensual deslizable) ──────────────────────────
+function DonutSlider({ gastos, delMes, mesActual, mesOffset, rangoMes, onPrev, onNext }: {
+  gastos: Gasto[]
+  delMes: Gasto[]
+  mesActual: string
+  mesOffset: number
+  rangoMes: string | null
+  onPrev: () => void
+  onNext: () => void
+}) {
+  const [slide, setSlide] = useState(0)
+
+  return (
+    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+      {/* Slide header */}
+      <div className="flex items-center justify-between px-5 pt-5 pb-3">
+        <div>
+          <p className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-widest">
+            {slide === 0 ? 'Distribución de Métodos' : 'Métodos del Mes'}
+          </p>
+          <p className="text-zinc-600 text-[10px] mt-0.5">
+            {slide === 0
+              ? 'Histórico total'
+              : rangoMes ?? 'Sin gastos este mes'
+            }
+          </p>
+        </div>
+        {slide === 1 && (
+          <div className="flex items-center gap-1">
+            <button onClick={onPrev} className="w-6 h-6 flex items-center justify-center rounded-lg text-zinc-500 active:bg-zinc-800">
+              <ChevronLeft size={14} />
+            </button>
+            <span className="text-zinc-400 text-[10px] font-bold capitalize">{mesNombre(mesActual)}</span>
+            <button onClick={onNext} disabled={mesOffset === 0}
+              className="w-6 h-6 flex items-center justify-center rounded-lg text-zinc-500 active:bg-zinc-800 disabled:opacity-30">
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Scrollable slides */}
+      <div
+        className="flex overflow-x-auto snap-x snap-mandatory scrollbar-none"
+        style={{ scrollbarWidth: 'none' }}
+        onScroll={e => {
+          const el = e.currentTarget
+          setSlide(Math.round(el.scrollLeft / el.clientWidth))
+        }}
+      >
+        <div className="flex-shrink-0 w-full snap-start px-5 pb-5">
+          <MetodosDonut gastos={gastos} label="histórico" />
+        </div>
+        <div className="flex-shrink-0 w-full snap-start px-5 pb-5">
+          <MetodosDonut gastos={delMes} label={mesNombre(mesActual)} />
+        </div>
+      </div>
+
+      {/* Dots */}
+      <div className="flex justify-center gap-1.5 pb-4">
+        {[0, 1].map(i => (
+          <span key={i} className={`w-1.5 h-1.5 rounded-full transition-colors ${slide === i ? 'bg-accent' : 'bg-zinc-700'}`} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────
 export default function MobileGastos() {
   const { gastos, agregar, eliminar } = useGastos()
@@ -316,35 +384,16 @@ export default function MobileGastos() {
             </div>
           </div>
 
-          {/* Distribución universal */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
-            <p className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-widest mb-1">Distribución de Métodos</p>
-            <p className="text-zinc-600 text-[10px] mb-4">Histórico total</p>
-            <MetodosDonut gastos={gastos} label="histórico" />
-          </div>
-
-          {/* Distribución mensual */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
-            <div className="flex items-start justify-between mb-1">
-              <p className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-widest">Métodos del Mes</p>
-              <div className="flex items-center gap-1">
-                <button onClick={() => setMesOffset(v => v - 1)}
-                  className="w-6 h-6 flex items-center justify-center rounded-lg text-zinc-500 active:bg-zinc-800">
-                  <ChevronLeft size={14} />
-                </button>
-                <span className="text-zinc-400 text-[10px] font-bold capitalize">{mesNombre(mesActual)}</span>
-                <button onClick={() => setMesOffset(v => Math.min(v + 1, 0))} disabled={mesOffset === 0}
-                  className="w-6 h-6 flex items-center justify-center rounded-lg text-zinc-500 active:bg-zinc-800 disabled:opacity-30">
-                  <ChevronRight size={14} />
-                </button>
-              </div>
-            </div>
-            {rangoMes
-              ? <p className="text-zinc-600 text-[10px] mb-4">{rangoMes}</p>
-              : <p className="text-zinc-600 text-[10px] mb-4">Sin gastos este mes</p>
-            }
-            <MetodosDonut gastos={delMes} label={mesNombre(mesActual)} />
-          </div>
+          {/* Distribución — slider */}
+          <DonutSlider
+            gastos={gastos}
+            delMes={delMes}
+            mesActual={mesActual}
+            mesOffset={mesOffset}
+            rangoMes={rangoMes}
+            onPrev={() => setMesOffset(v => v - 1)}
+            onNext={() => setMesOffset(v => Math.min(v + 1, 0))}
+          />
         </div>
       )}
 
