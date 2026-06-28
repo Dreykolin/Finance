@@ -158,25 +158,37 @@ function MetodosDonut({ gastos, label }: { gastos: Gasto[]; label?: string }) {
   )
 }
 
-// ── Tendencia Mensual (pinch-to-zoom + pan) ────────────────────────────────
+// ── Tendencia Mensual (pinch-to-zoom + pan + día al hacer zoom) ────────────
 interface Vp { xStart: number; xEnd: number; yMin: number; yMax: number }
 interface GestureRef { vp: Vp; touches: [number, number][] }
 
 function TendenciaChart({ gastos, presupuesto }: { gastos: Gasto[]; presupuesto: number }) {
-  // ── ALL hooks first (no early returns before hooks) ──
   const svgRef  = useRef<SVGSVGElement>(null)
   const gesture = useRef<GestureRef | null>(null)
   const vpRef   = useRef<Vp | null>(null)
-  const [tooltip, setTooltip] = useState<number | null>(null)
+  const [tooltip, setTooltip] = useState<string | null>(null)
   const [vp, setVp] = useState<Vp>({ xStart: 0, xEnd: 0.5, yMin: 0, yMax: 100000 })
+  const ptsRef = useRef<{ key: string; x: number; value: number; label: string }[]>([])
 
-  // Compute data (no hooks below this line until useEffect)
+  // ── Datos ──
   const byMonth: Record<string, number> = {}
-  gastos.forEach(g => { byMonth[g.fecha.slice(0, 7)] = (byMonth[g.fecha.slice(0, 7)] ?? 0) + g.monto })
+  const byDay:   Record<string, number> = {}
+  gastos.forEach(g => {
+    byMonth[g.fecha.slice(0, 7)] = (byMonth[g.fecha.slice(0, 7)] ?? 0) + g.monto
+    byDay[g.fecha]               = (byDay[g.fecha]               ?? 0) + g.monto
+  })
   const months = Object.keys(byMonth).sort()
-  const values = months.map(m => byMonth[m])
 
-  // Reset viewport to show all data when gastos load or change
+  // Posición X de un día en el espacio de coordenadas (mes + fracción del día)
+  function dayXPos(fecha: string): number {
+    const [y, m, d] = fecha.split('-')
+    const mIdx = months.indexOf(`${y}-${m}`)
+    if (mIdx === -1) return -1
+    const daysInM = new Date(+y, +m, 0).getDate()
+    return mIdx + (parseInt(d) - 1) / daysInM
+  }
+
+  // Reset al cargar datos
   useEffect(() => {
     if (gastos.length === 0) return
     const byM: Record<string, number> = {}
@@ -192,32 +204,40 @@ function TendenciaChart({ gastos, presupuesto }: { gastos: Gasto[]; presupuesto:
   const W = 320, H = 200
   const gW = W - PL - PR, gH = H - PT - PB
 
-  const toSvgX = (i: number) => PL + ((i - vp.xStart) / (vp.xEnd - vp.xStart)) * gW
+  // ── Granularidad: días cuando el zoom muestra < 1.8 meses ──
+  const xRange    = vp.xEnd - vp.xStart
+  const showDays  = xRange < 1.8
+  const origXMax  = Math.max(months.length - 1, 0.5)  // límite de zoom-out
+
+  // Puntos visibles según granularidad
+  type Pt = { key: string; x: number; value: number; label: string }
+  const pts: Pt[] = showDays
+    ? Object.entries(byDay)
+        .map(([fecha, val]) => ({
+          key: fecha, x: dayXPos(fecha), value: val,
+          label: fecha.slice(8),  // día "01"…"31"
+        }))
+        .filter(p => p.x >= vp.xStart - 0.1 && p.x <= vp.xEnd + 0.1 && p.x >= 0)
+        .sort((a, b) => a.x - b.x)
+    : months
+        .map((m, i) => ({ key: m, x: i, value: byMonth[m], label: mesCorto(m) }))
+        .filter(p => p.x >= vp.xStart - 0.5 && p.x <= vp.xEnd + 0.5)
+
+  const toSvgX = (x: number) => PL + ((x - vp.xStart) / xRange) * gW
   const toSvgY = (v: number) => PT + (1 - (v - vp.yMin) / (vp.yMax - vp.yMin)) * gH
 
-  // Y axis grid based on current viewport
+  // Y grid
   const { step: curStep } = niceScale(vp.yMax - vp.yMin)
-  const yFirst = Math.ceil(vp.yMin / curStep) * curStep
   const yLines: number[] = []
-  for (let v = yFirst; v <= vp.yMax; v += curStep) yLines.push(v)
+  for (let v = Math.ceil(vp.yMin / curStep) * curStep; v <= vp.yMax; v += curStep) yLines.push(v)
 
-  // Visible months within viewport (with 0.5 buffer)
-  const visibleIdxs = months.map((_, i) => i).filter(i => i >= vp.xStart - 0.5 && i <= vp.xEnd + 0.5)
-
-  const pathPts = visibleIdxs.map(i => ({ x: toSvgX(i), y: toSvgY(values[i]) }))
+  const pathPts = pts.map(p => ({ x: toSvgX(p.x), y: toSvgY(p.value) }))
   const pathD = pathPts.map((p, j) => `${j === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ')
-  const areaD = pathPts.length > 0
-    ? `${pathD} L ${pathPts[pathPts.length - 1].x.toFixed(1)} ${(PT + gH).toFixed(1)} L ${pathPts[0].x.toFixed(1)} ${(PT + gH).toFixed(1)} Z`
+  const areaD = pathPts.length > 1
+    ? `${pathD} L ${pathPts.at(-1)!.x.toFixed(1)} ${(PT+gH).toFixed(1)} L ${pathPts[0].x.toFixed(1)} ${(PT+gH).toFixed(1)} Z`
     : ''
 
   const budgetY = presupuesto > 0 && presupuesto >= vp.yMin && presupuesto <= vp.yMax ? toSvgY(presupuesto) : null
-
-  // Client → SVG viewBox coords
-  function clientToSvg(cx: number, cy: number): [number, number] {
-    const r = svgRef.current?.getBoundingClientRect()
-    if (!r) return [0, 0]
-    return [(cx - r.left) / r.width * W, (cy - r.top) / r.height * H]
-  }
 
   function svgToData(sx: number, sy: number, v: Vp): [number, number] {
     return [
@@ -225,13 +245,10 @@ function TendenciaChart({ gastos, presupuesto }: { gastos: Gasto[]; presupuesto:
       v.yMax   - ((sy - PT) / gH) * (v.yMax  - v.yMin),
     ]
   }
+  function distT(a: [number, number], b: [number, number]) { return Math.hypot(a[0]-b[0], a[1]-b[1]) }
 
-  function dist(a: [number, number], b: [number, number]) {
-    return Math.hypot(a[0] - b[0], a[1] - b[1])
-  }
-
-  // Keep vpRef in sync so imperative listeners can read current vp
-  vpRef.current = vp
+  vpRef.current  = vp
+  ptsRef.current = pts
 
   useEffect(() => {
     const el = svgRef.current
@@ -240,59 +257,81 @@ function TendenciaChart({ gastos, presupuesto }: { gastos: Gasto[]; presupuesto:
     function onStart(e: TouchEvent) {
       e.preventDefault()
       setTooltip(null)
-      const ts = Array.from(e.touches).map(t => [t.clientX, t.clientY] as [number, number])
-      gesture.current = { vp: { ...vpRef.current! }, touches: ts }
+      gesture.current = { vp: { ...vpRef.current! }, touches: Array.from(e.touches).map(t => [t.clientX, t.clientY] as [number,number]) }
     }
 
     function onMove(e: TouchEvent) {
       e.preventDefault()
-      if (!gesture.current || !vpRef.current) return
+      if (!gesture.current) return
       const { vp: sv, touches: st } = gesture.current
-      const ct = Array.from(e.touches).map(t => [t.clientX, t.clientY] as [number, number])
+      const ct = Array.from(e.touches).map(t => [t.clientX, t.clientY] as [number,number])
       const r  = el!.getBoundingClientRect()
       if (!r.width) return
 
       if (ct.length === 1) {
-        const dsx = (ct[0][0] - st[0][0]) / r.width  * W
-        const dsy = (ct[0][1] - st[0][1]) / r.height * H
-        const xRange = sv.xEnd - sv.xStart
-        const yRange = sv.yMax - sv.yMin
-        const dDataX = -(dsx / gW) * xRange
-        const dDataY =  (dsy / gH) * yRange
-
-        let xs = sv.xStart + dDataX, xe = sv.xEnd + dDataX
-        if (xs < 0)                   { xs = 0; xe = xRange }
-        if (xe > months.length - 0.5) { xe = months.length - 0.5; xs = xe - xRange }
-        const ym = Math.max(0, sv.yMin + dDataY)
-        setVp({ xStart: xs, xEnd: xe, yMin: ym, yMax: ym + yRange })
+        const dsx   = (ct[0][0] - st[0][0]) / r.width  * W
+        const dsy   = (ct[0][1] - st[0][1]) / r.height * H
+        const xRng  = sv.xEnd - sv.xStart
+        const yRng  = sv.yMax - sv.yMin
+        let xs = sv.xStart - (dsx / gW) * xRng
+        let xe = sv.xEnd   - (dsx / gW) * xRng
+        if (xs < 0)        { xs = 0; xe = xRng }
+        if (xe > origXMax) { xe = origXMax; xs = xe - xRng }
+        const ym = Math.max(0, sv.yMin + (dsy / gH) * yRng)
+        setVp({ xStart: xs, xEnd: xe, yMin: ym, yMax: ym + yRng })
 
       } else if (ct.length >= 2) {
-        const sd = dist(st[0], st[1]), cd = dist(ct[0], ct[1])
+        const sd = distT(st[0], st[1]), cd = distT(ct[0], ct[1])
         if (sd === 0) return
-        const scale = sd / cd
+        const scale = sd / cd  // >1 = zoom in
+        // No permitir zoom-out más allá del rango original
+        const newXRng = Math.min(Math.max((sv.xEnd - sv.xStart) * scale, 0.1), origXMax)
+        const newYRng = Math.max((sv.yMax - sv.yMin) * scale, 5000)
 
         const cx = (st[0][0] + st[1][0]) / 2, cy = (st[0][1] + st[1][1]) / 2
-        const svgCx = (cx - r.left) / r.width  * W
+        const svgCx = (cx - r.left) / r.width * W
         const svgCy = (cy - r.top)  / r.height * H
         const [pdx, pdy] = svgToData(svgCx, svgCy, sv)
+        const fracX = (pdx - sv.xStart) / (sv.xEnd - sv.xStart)
+        const fracY = (sv.yMax - pdy)   / (sv.yMax  - sv.yMin)
 
-        const xRange = Math.min(Math.max((sv.xEnd - sv.xStart) * scale, 0.5), months.length)
-        const yRange = Math.max((sv.yMax - sv.yMin) * scale, 10000)
-        const fracX  = (pdx - sv.xStart) / (sv.xEnd - sv.xStart)
-        const fracY  = (sv.yMax - pdy)   / (sv.yMax  - sv.yMin)
-
-        let xs = pdx - fracX * xRange, xe = xs + xRange
-        if (xs < 0)                   { xs = 0; xe = xRange }
-        if (xe > months.length - 0.5) { xe = months.length - 0.5; xs = xe - xRange }
-        let yMx = pdy + fracY * yRange, ym = Math.max(0, yMx - yRange)
-        setVp({ xStart: xs, xEnd: xe, yMin: ym, yMax: ym + yRange })
+        let xs = pdx - fracX * newXRng, xe = xs + newXRng
+        if (xs < 0)        { xs = 0; xe = newXRng }
+        if (xe > origXMax) { xe = origXMax; xs = xe - newXRng }
+        let ym = Math.max(0, pdy + fracY * newYRng - newYRng)
+        setVp({ xStart: xs, xEnd: xe, yMin: ym, yMax: ym + newYRng })
       }
     }
 
     function onEnd(e: TouchEvent) {
-      if (e.touches.length === 0) { gesture.current = null; return }
-      const ts = Array.from(e.touches).map(t => [t.clientX, t.clientY] as [number, number])
-      gesture.current = { vp: { ...vpRef.current! }, touches: ts }
+      if (e.touches.length === 0) {
+        // Detectar tap: 1 dedo, poco movimiento
+        if (gesture.current?.touches.length === 1 && e.changedTouches.length === 1) {
+          const st = gesture.current.touches[0]
+          const ct = e.changedTouches[0]
+          const moved = Math.hypot(ct.clientX - st[0], ct.clientY - st[1])
+          if (moved < 12) {
+            const r = el!.getBoundingClientRect()
+            const tapX = (ct.clientX - r.left) / r.width  * W
+            const tapY = (ct.clientY - r.top)  / r.height * H
+            const v = vpRef.current!
+            const xRng = v.xEnd - v.xStart
+            let closest: string | null = null, best = Infinity
+            for (const pt of ptsRef.current) {
+              const px = PL + ((pt.x - v.xStart) / xRng) * gW
+              const py = PT + (1 - (pt.value - v.yMin) / (v.yMax - v.yMin)) * gH
+              const d  = Math.hypot(tapX - px, tapY - py)
+              if (d < best) { best = d; closest = pt.key }
+            }
+            if (closest && best < 28) {
+              setTooltip(prev => prev === closest ? null : closest)
+            }
+          }
+        }
+        gesture.current = null
+        return
+      }
+      gesture.current = { vp: { ...vpRef.current! }, touches: Array.from(e.touches).map(t => [t.clientX, t.clientY] as [number,number]) }
     }
 
     el.addEventListener('touchstart', onStart, { passive: false })
@@ -303,7 +342,7 @@ function TendenciaChart({ gastos, presupuesto }: { gastos: Gasto[]; presupuesto:
       el.removeEventListener('touchmove',  onMove)
       el.removeEventListener('touchend',   onEnd)
     }
-  }, [months.length])  // re-attach only if month count changes
+  }, [months.length, origXMax])
 
   if (months.length === 0) return (
     <div className="h-48 flex items-center justify-center text-zinc-600 text-sm italic">No hay datos suficientes</div>
@@ -311,12 +350,7 @@ function TendenciaChart({ gastos, presupuesto }: { gastos: Gasto[]; presupuesto:
 
   return (
     <div>
-      <svg
-        ref={svgRef}
-        viewBox={`0 0 ${W} ${H}`}
-        className="w-full select-none"
-        style={{ touchAction: 'none' }}
-      >
+      <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} className="w-full select-none" style={{ touchAction: 'none' }}>
         <defs>
           <linearGradient id="tGrad" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.25" />
@@ -330,45 +364,44 @@ function TendenciaChart({ gastos, presupuesto }: { gastos: Gasto[]; presupuesto:
         {/* Y grid */}
         {yLines.map(v => {
           const y = toSvgY(v)
-          if (y < PT || y > PT + gH) return null
-          return (
+          return y >= PT && y <= PT + gH ? (
             <g key={v}>
-              <line x1={PL} y1={y} x2={W - PR} y2={y} stroke="white" strokeOpacity="0.05" strokeWidth="1" />
-              <text x={PL - 8} y={y + 4} textAnchor="end" fontSize="9" fill="#71717a">{fmtMil(v)}</text>
+              <line x1={PL} y1={y} x2={W-PR} y2={y} stroke="white" strokeOpacity="0.05" strokeWidth="1" />
+              <text x={PL-8} y={y+4} textAnchor="end" fontSize="9" fill="#71717a">{fmtMil(v)}</text>
             </g>
-          )
+          ) : null
         })}
 
         {/* Budget */}
         {budgetY !== null && (
           <g>
-            <line x1={PL} y1={budgetY} x2={W - PR} y2={budgetY} stroke="#ef4444" strokeWidth="1.5" strokeDasharray="6 5" strokeOpacity="0.6" />
-            <text x={W - PR - 2} y={budgetY - 4} textAnchor="end" fontSize="9" fill="#ef4444" fontWeight="bold">LÍMITE</text>
+            <line x1={PL} y1={budgetY} x2={W-PR} y2={budgetY} stroke="#ef4444" strokeWidth="1.5" strokeDasharray="6 5" strokeOpacity="0.6" />
+            <text x={W-PR-2} y={budgetY-4} textAnchor="end" fontSize="9" fill="#ef4444" fontWeight="bold">LÍMITE</text>
           </g>
         )}
 
-        {/* Area + line (clipped) */}
+        {/* Área + línea */}
         <g clipPath="url(#chartClip)">
           {areaD && <path d={areaD} fill="url(#tGrad)" />}
           {pathD && <path d={pathD} fill="none" stroke="#8b5cf6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
         </g>
 
-        {/* Dots + X labels */}
-        {visibleIdxs.map(i => {
-          const x = toSvgX(i), y = toSvgY(values[i])
-          if (x < PL - 10 || x > W - PR + 10) return null
-          const sel = tooltip === i
+        {/* Puntos + etiquetas X */}
+        {pts.map(pt => {
+          const sx = toSvgX(pt.x), sy = toSvgY(pt.value)
+          if (sx < PL - 12 || sx > W - PR + 12) return null
+          const sel = tooltip === pt.key
           return (
-            <g key={months[i]} onClick={() => setTooltip(sel ? null : i)} style={{ cursor: 'pointer' }}>
-              <text x={x} y={H - 6} textAnchor="middle" fontSize="10" fill="#a1a1aa" fontWeight="bold">{mesCorto(months[i])}</text>
-              {y >= PT && y <= PT + gH && (
+            <g key={pt.key}>
+              <text x={sx} y={H-6} textAnchor="middle" fontSize="10" fill="#a1a1aa" fontWeight="bold">{pt.label}</text>
+              {sy >= PT && sy <= PT + gH && (
                 <>
-                  <circle cx={x} cy={y} r={sel ? 7 : 5} fill="#09090b" />
-                  <circle cx={x} cy={y} r={sel ? 7 : 5} fill="none" stroke={sel ? 'white' : '#8b5cf6'} strokeWidth={sel ? 2.5 : 2} />
+                  <circle cx={sx} cy={sy} r={sel ? 7 : 5} fill="#09090b" />
+                  <circle cx={sx} cy={sy} r={sel ? 7 : 5} fill="none" stroke={sel ? 'white' : '#8b5cf6'} strokeWidth={sel ? 2.5 : 2} />
                   {sel && (
                     <g>
-                      <rect x={x - 38} y={y - 30} width="76" height="20" rx="5" fill="#27272a" />
-                      <text x={x} y={y - 16} textAnchor="middle" fontSize="11" fill="white" fontWeight="bold">{formatCLP(values[i])}</text>
+                      <rect x={sx-40} y={sy-32} width="80" height="22" rx="5" fill="#27272a" />
+                      <text x={sx} y={sy-17} textAnchor="middle" fontSize="11" fill="white" fontWeight="bold">{formatCLP(pt.value)}</text>
                     </g>
                   )}
                 </>
@@ -377,8 +410,10 @@ function TendenciaChart({ gastos, presupuesto }: { gastos: Gasto[]; presupuesto:
           )
         })}
 
-        {/* Reset hint */}
-        <text x={W - PR} y={PT + 10} textAnchor="end" fontSize="8" fill="#3f3f46">pellizca para zoom</text>
+        {/* Hint granularidad */}
+        <text x={W-PR} y={PT+10} textAnchor="end" fontSize="8" fill="#3f3f46">
+          {showDays ? 'vista por día' : 'pellizca para ver días'}
+        </text>
       </svg>
     </div>
   )
