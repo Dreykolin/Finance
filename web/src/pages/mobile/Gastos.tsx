@@ -249,7 +249,7 @@ function TendenciaChart({ gastos, presupuesto }: { gastos: Gasto[]; presupuesto:
       if (!gesture.current || !vpRef.current) return
       const { vp: sv, touches: st } = gesture.current
       const ct = Array.from(e.touches).map(t => [t.clientX, t.clientY] as [number, number])
-      const r  = el.getBoundingClientRect()
+      const r  = el!.getBoundingClientRect()
       if (!r.width) return
 
       if (ct.length === 1) {
