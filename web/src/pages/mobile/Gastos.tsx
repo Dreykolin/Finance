@@ -285,16 +285,17 @@ function renderChart(
   )
 }
 
-// ── Versión estática (card) ─────────────────────────────────────────────────
+// ── Versión estática (card) — siempre granularidad mensual ─────────────────
 function TendenciaChartStatic({ gastos, presupuesto }: { gastos: Gasto[]; presupuesto: number }) {
-  const { byMonth, byDay, months } = buildChartData(gastos)
+  const { byMonth, months } = buildChartData(gastos)
   if (months.length === 0) return (
     <div className="h-36 flex items-center justify-center text-zinc-600 text-sm italic">Sin datos</div>
   )
   const values = months.map(m => byMonth[m])
   const { maxY } = niceScale(Math.max(...values, presupuesto || 0, 1))
   const vp: Vp = { xStart: 0, xEnd: Math.max(months.length - 1, 0.5), yMin: 0, yMax: maxY }
-  const pts = buildPts(vp, byMonth, byDay, months)
+  // Forzar vista mensual — no daily (evita problema de filtro con 1 solo mes)
+  const pts: ChartPt[] = months.map((m, i) => ({ key: m, x: i, value: byMonth[m], label: mesCorto(m) }))
   return renderChart(vp, pts, presupuesto, null)
 }
 
@@ -420,14 +421,17 @@ function TendenciaChart({ gastos, presupuesto }: { gastos: Gasto[]; presupuesto:
   const [expanded, setExpanded] = useState(false)
   return (
     <>
-      <div className="relative">
+      <div>
         <TendenciaChartStatic gastos={gastos} presupuesto={presupuesto} />
-        <button
-          onClick={() => setExpanded(true)}
-          className="absolute top-0 right-0 w-7 h-7 flex items-center justify-center rounded-lg bg-zinc-800/80 text-zinc-400 active:bg-zinc-700"
-        >
-          <Maximize2 size={13} />
-        </button>
+        <div className="flex justify-end mt-1">
+          <button
+            onClick={() => setExpanded(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800 text-zinc-400 text-[11px] font-bold active:bg-zinc-700"
+          >
+            <Maximize2 size={11} />
+            Ampliar
+          </button>
+        </div>
       </div>
 
       {expanded && (
