@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Settings, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useGastos } from '../../store/useGastos'
 import { formatCLP, formatFecha } from '../../lib/format'
@@ -158,8 +158,13 @@ function MetodosDonut({ gastos, label }: { gastos: Gasto[]; label?: string }) {
   )
 }
 
-// ── Tendencia Mensual ──────────────────────────────────────────────────────
+// ── Tendencia Mensual (pinch-to-zoom + pan) ────────────────────────────────
+interface Vp { xStart: number; xEnd: number; yMin: number; yMax: number }
+interface GestureRef { vp: Vp; touches: [number, number][] }
+
 function TendenciaChart({ gastos, presupuesto }: { gastos: Gasto[]; presupuesto: number }) {
+  const svgRef   = useRef<SVGSVGElement>(null)
+  const gesture  = useRef<GestureRef | null>(null)
   const [tooltip, setTooltip] = useState<number | null>(null)
 
   const byMonth: Record<string, number> = {}
@@ -170,64 +175,205 @@ function TendenciaChart({ gastos, presupuesto }: { gastos: Gasto[]; presupuesto:
     <div className="h-48 flex items-center justify-center text-zinc-600 text-sm italic">No hay datos suficientes</div>
   )
 
-  const values = months.map(m => byMonth[m])
-  const maxVal = Math.max(...values, presupuesto || 0)
-  const { maxY, step } = niceScale(maxVal)
-  const steps = Math.round(maxY / step)
+  const values   = months.map(m => byMonth[m])
+  const dataMaxY = Math.max(...values, presupuesto || 0)
+  const { maxY: initMaxY } = niceScale(dataMaxY)
+
+  const [vp, setVp] = useState<Vp>({
+    xStart: 0, xEnd: Math.max(months.length - 1, 0.5),
+    yMin: 0,   yMax: initMaxY,
+  })
 
   const PL = 52, PB = 28, PT = 16, PR = 12
   const W = 320, H = 200
   const gW = W - PL - PR, gH = H - PT - PB
 
-  const toX = (i: number) => PL + (months.length === 1 ? gW / 2 : (i / (months.length - 1)) * gW)
-  const toY = (v: number) => PT + (1 - v / maxY) * gH
+  const toSvgX = (i: number) => PL + ((i - vp.xStart) / (vp.xEnd - vp.xStart)) * gW
+  const toSvgY = (v: number) => PT + (1 - (v - vp.yMin) / (vp.yMax - vp.yMin)) * gH
 
-  const pathD = months.map((_, i) => `${i === 0 ? 'M' : 'L'} ${toX(i).toFixed(1)} ${toY(values[i]).toFixed(1)}`).join(' ')
-  const areaD = `${pathD} L ${toX(months.length - 1).toFixed(1)} ${(PT + gH).toFixed(1)} L ${toX(0).toFixed(1)} ${(PT + gH).toFixed(1)} Z`
-  const budgetY = presupuesto > 0 ? toY(presupuesto) : null
+  // Y axis grid based on current viewport
+  const { step: curStep } = niceScale(vp.yMax - vp.yMin)
+  const yFirst = Math.ceil(vp.yMin / curStep) * curStep
+  const yLines: number[] = []
+  for (let v = yFirst; v <= vp.yMax; v += curStep) yLines.push(v)
+
+  // Visible months within viewport (with 0.5 buffer)
+  const visibleIdxs = months.map((_, i) => i).filter(i => i >= vp.xStart - 0.5 && i <= vp.xEnd + 0.5)
+
+  const pathPts = visibleIdxs.map(i => ({ x: toSvgX(i), y: toSvgY(values[i]) }))
+  const pathD = pathPts.map((p, j) => `${j === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ')
+  const areaD = pathPts.length > 0
+    ? `${pathD} L ${pathPts[pathPts.length - 1].x.toFixed(1)} ${(PT + gH).toFixed(1)} L ${pathPts[0].x.toFixed(1)} ${(PT + gH).toFixed(1)} Z`
+    : ''
+
+  const budgetY = presupuesto > 0 && presupuesto >= vp.yMin && presupuesto <= vp.yMax ? toSvgY(presupuesto) : null
+
+  // Client → SVG viewBox coords
+  function clientToSvg(cx: number, cy: number): [number, number] {
+    const r = svgRef.current?.getBoundingClientRect()
+    if (!r) return [0, 0]
+    return [(cx - r.left) / r.width * W, (cy - r.top) / r.height * H]
+  }
+
+  function svgToData(sx: number, sy: number, v: Vp): [number, number] {
+    return [
+      v.xStart + ((sx - PL) / gW) * (v.xEnd - v.xStart),
+      v.yMax   - ((sy - PT) / gH) * (v.yMax  - v.yMin),
+    ]
+  }
+
+  function dist(a: [number, number], b: [number, number]) {
+    return Math.hypot(a[0] - b[0], a[1] - b[1])
+  }
+
+  function onTouchStart(e: React.TouchEvent) {
+    e.preventDefault()
+    setTooltip(null)
+    const ts = Array.from(e.touches).map(t => [t.clientX, t.clientY] as [number, number])
+    gesture.current = { vp: { ...vp }, touches: ts }
+  }
+
+  function onTouchMove(e: React.TouchEvent) {
+    e.preventDefault()
+    if (!gesture.current) return
+    const { vp: sv, touches: st } = gesture.current
+    const ct = Array.from(e.touches).map(t => [t.clientX, t.clientY] as [number, number])
+    const r  = svgRef.current?.getBoundingClientRect()
+    if (!r) return
+    const toSvgDelta = (dx: number, dy: number) => [dx / r.width * W, dy / r.height * H]
+
+    if (ct.length === 1) {
+      // ── Pan ──
+      const [dsx, dsy] = toSvgDelta(ct[0][0] - st[0][0], ct[0][1] - st[0][1])
+      const xRange = sv.xEnd - sv.xStart
+      const yRange = sv.yMax - sv.yMin
+      const dDataX = -(dsx / gW) * xRange
+      const dDataY =  (dsy / gH) * yRange
+
+      let xs = sv.xStart + dDataX
+      let xe = sv.xEnd   + dDataX
+      if (xs < 0)                    { xs = 0; xe = xRange }
+      if (xe > months.length - 0.5)  { xe = months.length - 0.5; xs = xe - xRange }
+
+      let ym = Math.max(0, sv.yMin + dDataY)
+      const yMx = ym + yRange
+      setVp({ xStart: xs, xEnd: xe, yMin: ym, yMax: yMx })
+
+    } else if (ct.length >= 2) {
+      // ── Pinch zoom ──
+      const sd = dist(st[0], st[1])
+      const cd = dist(ct[0], ct[1])
+      if (sd === 0) return
+      const scale = sd / cd  // >1 zoom in, <1 zoom out
+
+      // Pinch center in SVG coords (from start touches)
+      const [pcx, pcy] = clientToSvg(
+        (st[0][0] + st[1][0]) / 2,
+        (st[0][1] + st[1][1]) / 2,
+      )
+      const [pdx, pdy] = svgToData(pcx, pcy, sv)
+
+      // New ranges scaled around pinch center
+      const xRange = Math.min(Math.max((sv.xEnd - sv.xStart) * scale, 0.5), months.length)
+      const yRange = Math.max((sv.yMax - sv.yMin) * scale, 10000)
+
+      const fracX = (pdx - sv.xStart) / (sv.xEnd - sv.xStart)
+      const fracY = (sv.yMax - pdy)   / (sv.yMax  - sv.yMin)
+
+      let xs = pdx - fracX * xRange
+      let xe = xs  + xRange
+      if (xs < 0)                   { xs = 0; xe = xRange }
+      if (xe > months.length - 0.5) { xe = months.length - 0.5; xs = xe - xRange }
+
+      let yMx = pdy + fracY * yRange
+      let ym  = Math.max(0, yMx - yRange)
+      yMx = ym + yRange
+
+      setVp({ xStart: xs, xEnd: xe, yMin: ym, yMax: yMx })
+    }
+  }
+
+  function onTouchEnd(e: React.TouchEvent) {
+    if (e.touches.length === 0) { gesture.current = null; return }
+    // Reset baseline for remaining fingers
+    const ts = Array.from(e.touches).map(t => [t.clientX, t.clientY] as [number, number])
+    gesture.current = { vp: { ...vp }, touches: ts }
+  }
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
-      <defs>
-        <linearGradient id="tGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.25" />
-          <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      {Array.from({ length: steps + 1 }, (_, i) => {
-        const v = step * i, y = toY(v)
-        return (
-          <g key={i}>
-            <line x1={PL} y1={y} x2={W - PR} y2={y} stroke="white" strokeOpacity="0.05" strokeWidth="1" />
-            <text x={PL - 8} y={y + 4} textAnchor="end" fontSize="9" fill="#71717a">{fmtMil(v)}</text>
+    <div style={{ touchAction: 'none' }}>
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${W} ${H}`}
+        className="w-full select-none"
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+      >
+        <defs>
+          <linearGradient id="tGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0" />
+          </linearGradient>
+          <clipPath id="chartClip">
+            <rect x={PL} y={PT} width={gW} height={gH} />
+          </clipPath>
+        </defs>
+
+        {/* Y grid */}
+        {yLines.map(v => {
+          const y = toSvgY(v)
+          if (y < PT || y > PT + gH) return null
+          return (
+            <g key={v}>
+              <line x1={PL} y1={y} x2={W - PR} y2={y} stroke="white" strokeOpacity="0.05" strokeWidth="1" />
+              <text x={PL - 8} y={y + 4} textAnchor="end" fontSize="9" fill="#71717a">{fmtMil(v)}</text>
+            </g>
+          )
+        })}
+
+        {/* Budget */}
+        {budgetY !== null && (
+          <g>
+            <line x1={PL} y1={budgetY} x2={W - PR} y2={budgetY} stroke="#ef4444" strokeWidth="1.5" strokeDasharray="6 5" strokeOpacity="0.6" />
+            <text x={W - PR - 2} y={budgetY - 4} textAnchor="end" fontSize="9" fill="#ef4444" fontWeight="bold">LÍMITE</text>
           </g>
-        )
-      })}
-      {budgetY !== null && (
-        <g>
-          <line x1={PL} y1={budgetY} x2={W - PR} y2={budgetY} stroke="#ef4444" strokeWidth="1.5" strokeDasharray="6 5" strokeOpacity="0.6" />
-          <text x={W - PR - 2} y={budgetY - 4} textAnchor="end" fontSize="9" fill="#ef4444" fontWeight="bold">LÍMITE</text>
+        )}
+
+        {/* Area + line (clipped) */}
+        <g clipPath="url(#chartClip)">
+          {areaD && <path d={areaD} fill="url(#tGrad)" />}
+          {pathD && <path d={pathD} fill="none" stroke="#8b5cf6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
         </g>
-      )}
-      <path d={areaD} fill="url(#tGrad)" />
-      <path d={pathD} fill="none" stroke="#8b5cf6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-      {months.map((m, i) => {
-        const x = toX(i), y = toY(values[i]), sel = tooltip === i
-        return (
-          <g key={m} onClick={() => setTooltip(sel ? null : i)} style={{ cursor: 'pointer' }}>
-            <text x={x} y={H - 6} textAnchor="middle" fontSize="10" fill="#a1a1aa" fontWeight="bold">{mesCorto(m)}</text>
-            <circle cx={x} cy={y} r={sel ? 7 : 5} fill="#09090b" />
-            <circle cx={x} cy={y} r={sel ? 7 : 5} fill="none" stroke={sel ? 'white' : '#8b5cf6'} strokeWidth={sel ? 2.5 : 2} />
-            {sel && (
-              <g>
-                <rect x={x - 38} y={y - 30} width="76" height="20" rx="5" fill="#27272a" />
-                <text x={x} y={y - 16} textAnchor="middle" fontSize="11" fill="white" fontWeight="bold">{formatCLP(values[i])}</text>
-              </g>
-            )}
-          </g>
-        )
-      })}
-    </svg>
+
+        {/* Dots + X labels */}
+        {visibleIdxs.map(i => {
+          const x = toSvgX(i), y = toSvgY(values[i])
+          if (x < PL - 10 || x > W - PR + 10) return null
+          const sel = tooltip === i
+          return (
+            <g key={months[i]} onClick={() => setTooltip(sel ? null : i)} style={{ cursor: 'pointer' }}>
+              <text x={x} y={H - 6} textAnchor="middle" fontSize="10" fill="#a1a1aa" fontWeight="bold">{mesCorto(months[i])}</text>
+              {y >= PT && y <= PT + gH && (
+                <>
+                  <circle cx={x} cy={y} r={sel ? 7 : 5} fill="#09090b" />
+                  <circle cx={x} cy={y} r={sel ? 7 : 5} fill="none" stroke={sel ? 'white' : '#8b5cf6'} strokeWidth={sel ? 2.5 : 2} />
+                  {sel && (
+                    <g>
+                      <rect x={x - 38} y={y - 30} width="76" height="20" rx="5" fill="#27272a" />
+                      <text x={x} y={y - 16} textAnchor="middle" fontSize="11" fill="white" fontWeight="bold">{formatCLP(values[i])}</text>
+                    </g>
+                  )}
+                </>
+              )}
+            </g>
+          )
+        })}
+
+        {/* Reset hint */}
+        <text x={W - PR} y={PT + 10} textAnchor="end" fontSize="8" fill="#3f3f46">pellizca para zoom</text>
+      </svg>
+    </div>
   )
 }
 
