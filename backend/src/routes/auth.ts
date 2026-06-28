@@ -49,13 +49,7 @@ router.get('/google/callback',
     const user = req.user as any
     const token = generateToken({ id: user.id, nombre: user.nombre, correo: user.correo })
 
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'none', // cross-origin: Vercel (frontend) ↔ Coolify (backend)
-      maxAge: 30 * 24 * 60 * 60 * 1000,
-    })
-    res.redirect(process.env.FRONTEND_URL!)
+    res.redirect(`${process.env.FRONTEND_URL}?token=${token}`)
   }
 )
 
