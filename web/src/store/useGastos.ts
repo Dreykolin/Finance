@@ -9,6 +9,7 @@ function mapGasto(r: any): Gasto {
     monto:     r.monto,
     fecha:     r.fecha.slice(0, 10),
     metodoPago: r.metodo_pago ?? '',
+    origen:     r.origen ?? 'manual',
   }
 }
 
@@ -21,7 +22,8 @@ export function useGastos() {
       .catch(console.error)
   }, [])
 
-  async function agregar(g: Omit<Gasto, 'id'>) {
+  // `origen` lo decide el servidor ('manual' aquí): el cliente nunca lo envía.
+  async function agregar(g: Omit<Gasto, 'id' | 'origen'>) {
     const created = await api.post<any>('/compras', {
       detalles:    g.descripcion,
       monto:       g.monto,

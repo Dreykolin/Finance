@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CreditCard, ShoppingBag, Check, Trash2, Plus } from 'lucide-react'
+import { CreditCard, ShoppingBag, Check, Trash2, Plus, Pencil, Minus } from 'lucide-react'
 import { useCuotas } from '../store/useCuotas'
 import Modal from '../components/Modal'
 import { formatCLP, formatFecha } from '../lib/format'
@@ -55,12 +55,13 @@ function ResumenRow({ label, value, highlight = false }: { label: string; value:
 }
 
 export default function Cuotas() {
-  const { cuotas, agregar, eliminar, marcarCuota } = useCuotas()
+  const { cuotas, agregar, editar, eliminar, marcarCuota } = useCuotas()
 
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [showGlobal, setShowGlobal] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
   const [confirmId, setConfirmId] = useState<number | null>(null)
+  const [editando, setEditando] = useState(false)
 
   const activas = cuotas.filter(c => c.cuotasPagadas < c.cuotasTotales)
   const totalPagadas  = cuotas.reduce((s, c) => s + c.cuotasPagadas, 0)
@@ -137,10 +138,17 @@ export default function Cuotas() {
       {/* Detail modal */}
       <Modal
         open={selected !== null}
-        onClose={() => setSelectedId(null)}
+        onClose={() => { setSelectedId(null); setEditando(false) }}
         title={selected?.producto}
       >
-        {selected && (
+        {selected && editando && (
+          <FormEditarCuota
+            cuota={selected}
+            onSave={async patch => { await editar(selected.id, patch); setEditando(false) }}
+            onCancel={() => setEditando(false)}
+          />
+        )}
+        {selected && !editando && (
           <div className="flex flex-col items-center gap-6">
             <p className="text-zinc-500 text-sm -mt-2">{selected.tienda}</p>
 
@@ -165,21 +173,42 @@ export default function Cuotas() {
               </p>
             </div>
 
-            <div className="flex gap-3 w-full">
-              <button
-                onClick={() => { marcarCuota(selected.id); setSelectedId(null) }}
-                disabled={selected.cuotasPagadas >= selected.cuotasTotales}
-                className="flex-1 flex items-center justify-center gap-2 bg-white text-zinc-950 font-bold rounded-xl py-3.5 text-sm hover:opacity-90 transition-opacity disabled:opacity-30"
-              >
-                <Check size={16} />
-                {selected.cuotasPagadas < selected.cuotasTotales ? 'Marcar cuota' : 'Pagado'}
-              </button>
-              <button
-                onClick={() => setConfirmId(selected.id)}
-                className="w-14 flex items-center justify-center bg-zinc-800 rounded-xl hover:bg-zinc-700 transition-colors"
-              >
-                <Trash2 size={18} className="text-red-500" />
-              </button>
+            <div className="flex flex-col gap-3 w-full">
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { marcarCuota(selected.id); setSelectedId(null) }}
+                  disabled={selected.cuotasPagadas >= selected.cuotasTotales}
+                  className="flex-1 flex items-center justify-center gap-2 bg-white text-zinc-950 font-bold rounded-xl py-3.5 text-sm hover:opacity-90 transition-opacity disabled:opacity-30"
+                >
+                  <Check size={16} />
+                  {selected.cuotasPagadas < selected.cuotasTotales ? 'Marcar cuota' : 'Pagado'}
+                </button>
+                <button
+                  onClick={() => setEditando(true)}
+                  title="Editar registro"
+                  className="w-14 flex items-center justify-center bg-zinc-800 rounded-xl hover:bg-zinc-700 transition-colors"
+                >
+                  <Pencil size={17} className="text-zinc-300" />
+                </button>
+                <button
+                  onClick={() => setConfirmId(selected.id)}
+                  title="Eliminar"
+                  className="w-14 flex items-center justify-center bg-zinc-800 rounded-xl hover:bg-zinc-700 transition-colors"
+                >
+                  <Trash2 size={18} className="text-red-500" />
+                </button>
+              </div>
+
+              {/* Atajo para el caso frecuente: marque una cuota por error. */}
+              {selected.cuotasPagadas > 0 && (
+                <button
+                  onClick={() => editar(selected.id, { cuotasPagadas: selected.cuotasPagadas - 1 })}
+                  className="flex items-center justify-center gap-2 text-zinc-500 hover:text-zinc-300 text-xs font-bold py-1 transition-colors"
+                >
+                  <Minus size={13} />
+                  Deshacer ultima cuota
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -230,6 +259,114 @@ export default function Cuotas() {
         </div>
       </Modal>
     </div>
+  )
+}
+
+/**
+ * Edicion integral del registro. `cuotasPagadas` es editable a proposito: es la
+ * unica forma de corregir un "Marcar cuota" accidental, y al bajarla el backend
+ * borra las compras que ese marcado habia generado en el historial de gastos.
+ */
+function FormEditarCuota({
+  cuota, onSave, onCancel,
+}: {
+  cuota: CompraCuotas
+  onSave: (patch: Partial<Omit<CompraCuotas, 'id'>>) => Promise<void>
+  onCancel: () => void
+}) {
+  const [producto, setProducto]           = useState(cuota.producto)
+  const [tienda, setTienda]               = useState(cuota.tienda)
+  const [cuotasTotales, setCuotasTotales] = useState(String(cuota.cuotasTotales))
+  const [montoCuota, setMontoCuota]       = useState(String(cuota.montoCuota))
+  const [cuotasPagadas, setCuotasPagadas] = useState(String(cuota.cuotasPagadas))
+  const [error, setError]                 = useState<string | null>(null)
+  const [guardando, setGuardando]         = useState(false)
+
+  const inputCls = "bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-accent transition-colors placeholder:text-zinc-600 w-full"
+  const labelCls = "text-zinc-500 text-[10px] font-extrabold tracking-widest uppercase mb-1.5 block"
+
+  const totales  = parseInt(cuotasTotales) || 0
+  const pagadas  = parseInt(cuotasPagadas) || 0
+  const aRevertir = cuota.cuotasPagadas - pagadas
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!producto || !tienda || !totales) return
+    if (pagadas > totales) { setError('Las cuotas pagadas no pueden superar el total.'); return }
+    setError(null); setGuardando(true)
+    try {
+      await onSave({
+        producto, tienda,
+        cuotasTotales: totales,
+        montoCuota: parseInt(montoCuota) || 0,
+        cuotasPagadas: pagadas,
+      })
+    } catch {
+      setError('No se pudo guardar. Revisa los datos e intenta de nuevo.')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="flex flex-col gap-4">
+      <div>
+        <label className={labelCls}>Producto</label>
+        <input className={inputCls} value={producto} onChange={e => setProducto(e.target.value)} required />
+      </div>
+      <div>
+        <label className={labelCls}>Tienda</label>
+        <input className={inputCls} value={tienda} onChange={e => setTienda(e.target.value)} required />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className={labelCls}>Total de cuotas</label>
+          <input className={inputCls} type="number" min="1" value={cuotasTotales}
+            onChange={e => setCuotasTotales(e.target.value.replace(/\D/g, ''))} required />
+        </div>
+        <div>
+          <label className={labelCls}>Valor de cuota</label>
+          <input className={inputCls} type="number" min="0" value={montoCuota}
+            onChange={e => setMontoCuota(e.target.value.replace(/\D/g, ''))} required />
+        </div>
+      </div>
+
+      <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 flex flex-col gap-2">
+        <label className={labelCls}>Cuotas pagadas</label>
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={() => setCuotasPagadas(String(Math.max(0, pagadas - 1)))}
+            className="w-9 h-9 flex items-center justify-center rounded-lg bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-colors">
+            <Minus size={15} />
+          </button>
+          <input className={`${inputCls} text-center flex-1`} type="number" min="0" value={cuotasPagadas}
+            onChange={e => setCuotasPagadas(e.target.value.replace(/\D/g, ''))} required />
+          <button type="button" onClick={() => setCuotasPagadas(String(Math.min(totales, pagadas + 1)))}
+            className="w-9 h-9 flex items-center justify-center rounded-lg bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-colors">
+            <Plus size={15} />
+          </button>
+        </div>
+        {aRevertir > 0 && (
+          <p className="text-yellow-500/90 text-xs leading-relaxed">
+            Se revertiran {aRevertir} {aRevertir === 1 ? 'cuota' : 'cuotas'} y se
+            {aRevertir === 1 ? ' borrara el gasto' : ' borraran los gastos'} que
+            {aRevertir === 1 ? ' genero' : ' generaron'} en tu historial.
+          </p>
+        )}
+      </div>
+
+      {error && <p className="text-red-400 text-xs">{error}</p>}
+
+      <div className="flex gap-3">
+        <button type="button" onClick={onCancel}
+          className="flex-1 py-3 rounded-xl bg-zinc-800 text-zinc-300 font-bold text-sm hover:bg-zinc-700 transition-colors">
+          Cancelar
+        </button>
+        <button type="submit" disabled={guardando}
+          className="flex-1 py-3 rounded-xl bg-accent text-white font-bold text-sm hover:opacity-90 transition-opacity disabled:opacity-40">
+          {guardando ? 'Guardando...' : 'Guardar cambios'}
+        </button>
+      </div>
+    </form>
   )
 }
 

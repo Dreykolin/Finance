@@ -37,17 +37,41 @@ router.post('/:id/toggle', async (req, res) => {
       await client.query('BEGIN')
       await client.query('UPDATE suscripciones SET pagado = TRUE WHERE id = $1', [sus.id])
       await client.query(
-        "INSERT INTO compras (id_usuario, detalles, monto, fecha, origen) VALUES ($1,$2,$3,$4,'suscripcion')",
-        [req.user!.id, sus.nombre, sus.precio, fecha]
+        "INSERT INTO compras (id_usuario, detalles, monto, fecha, origen, id_suscripcion) VALUES ($1,$2,$3,$4,'suscripcion',$5)",
+        [req.user!.id, sus.nombre, sus.precio, fecha, sus.id]
       )
       await client.query('COMMIT')
     } catch (e) {
-      await client.query('ROLLBACK'); throw e
+      await client.query('ROLLBACK').catch(() => {})
+      console.error('POST /suscripciones/:id/toggle', e)
+      res.status(500).json({ error: 'No se pudo registrar el pago' }); return
     } finally {
       client.release()
     }
   } else {
-    await pool.query('UPDATE suscripciones SET pagado = FALSE WHERE id = $1', [sus.id])
+    // Destildar es corregir un error de registro: el gasto auto-generado de este
+    // mes no debe quedar en el historial.
+    const client = await pool.connect()
+    try {
+      await client.query('BEGIN')
+      await client.query('UPDATE suscripciones SET pagado = FALSE WHERE id = $1', [sus.id])
+      await client.query(
+        `DELETE FROM compras WHERE id IN (
+           SELECT id FROM compras
+           WHERE id_suscripcion = $1 AND id_usuario = $2 AND origen = 'suscripcion'
+           ORDER BY fecha DESC, id DESC
+           LIMIT 1
+         )`,
+        [sus.id, req.user!.id]
+      )
+      await client.query('COMMIT')
+    } catch (e) {
+      await client.query('ROLLBACK').catch(() => {})
+      console.error('POST /suscripciones/:id/toggle (revertir)', e)
+      res.status(500).json({ error: 'No se pudo revertir el pago' }); return
+    } finally {
+      client.release()
+    }
   }
 
   const updated = await pool.query('SELECT * FROM suscripciones WHERE id = $1', [sus.id])

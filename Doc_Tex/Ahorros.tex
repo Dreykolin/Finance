@@ -1,0 +1,21 @@
+\section{Módulo de Ahorros}
+Este módulo está orientado al seguimiento del capital acumulado y al monitoreo del progreso hacia diferentes objetivos financieros trazados por el usuario.
+
+\subsection{Registro de Movimientos}
+La gestión del ahorro se basa en un historial transaccional. El usuario interactúa principalmente con una lista de \textbf{movimientos}, donde puede registrar dos tipos de operaciones que afectan su saldo disponible:
+\begin{itemize}
+    \item \textbf{Depósitos:} Aportes de capital destinados a incrementar el fondo de ahorro.
+    \item \textbf{Retiros:} Extracciones o disminuciones del fondo.
+\end{itemize}
+
+\subsection{Visualización y Metas Financieras}
+Una vez que el sistema cuenta con movimientos registrados, se habilita un panel de visualización para analizar la evolución del capital. 
+
+El componente principal es un \textbf{Gráfico de Líneas}, que comparte la base técnica del gráfico de Gastos, trazando el capital acumulado en el tiempo. Sin embargo, su lógica de referencia es distinta: en lugar de alertar sobre un "presupuesto" máximo, el gráfico dibuja \textbf{Metas}.
+\begin{itemize}
+    \item \textbf{Líneas de Umbral Múltiples:} El gráfico proyecta una línea horizontal por cada meta pendiente, ordenadas de la más cercana a la más lejana y diferenciadas por color, con su nombre y monto en la leyenda. Las metas ya completadas se retiran del gráfico. La escala vertical se ajusta para que la meta más alta quede siempre dentro del área visible, de modo que la brecha resulte legible.
+    \item \textbf{Orientación y Brecha Visual:} Esta disposición permite al usuario orientarse rápidamente, visualizando de forma clara e intuitiva la brecha existente (cuánto dinero falta) entre su capital actual (la línea de evolución del ahorro) y cada uno de sus objetivos financieros. La tarjeta de saldo complementa esta lectura indicando de forma explícita el monto restante para alcanzar la meta más próxima.
+\end{itemize}
+
+\subsection{Naturaleza de las Metas}
+Es importante precisar el alcance del concepto: las metas operan como \textbf{líneas de referencia sobre un saldo único}, no como sobres con dinero asignado. Todos los depósitos alimentan un mismo fondo común, y el progreso de cada meta se mide contra ese saldo total. En consecuencia, varias metas pueden aparecer simultáneamente como alcanzadas aun cuando el capital disponible solo permita cubrir una de ellas. El marcado de una meta como completada es, por tanto, una acción manual del usuario.

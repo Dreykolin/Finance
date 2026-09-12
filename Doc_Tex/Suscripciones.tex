@@ -1,0 +1,16 @@
+\section{Módulo de Suscripciones}
+Este módulo está enfocado en la gestión simplificada de gastos recurrentes, permitiendo al usuario tener un panorama claro de sus compromisos financieros fijos.
+
+\subsection{Alta de Servicios}
+El registro de una nueva suscripción está diseñado para ser rápido y de baja fricción. El usuario únicamente necesita ingresar dos datos clave para dar de alta el registro:
+\begin{itemize}
+    \item \textbf{Nombre:} Identificador del servicio (ej. Netflix, Gimnasio, Spotify).
+    \item \textbf{Monto:} Valor del cobro recurrente.
+\end{itemize}
+
+\subsection{Seguimiento Mensual}
+La lógica de control de este módulo se basa en un sistema de verificación periódica. Cada mes, la interfaz presenta el listado de suscripciones activas junto a un \textbf{sistema de \textit{checklist}}. El usuario interactúa marcando un \textit{check} manual en cada servicio una vez que constata que el cobro ha sido procesado o pagado en el mes en curso. Esta mecánica previene el solapamiento de pagos, el olvido de cancelaciones y los cobros sorpresa en la tarjeta.
+
+Marcar un servicio registra automáticamente el gasto correspondiente en el libro mayor. Destildarlo se interpreta como la corrección de un error de registro y, por consiguiente, \textbf{elimina también ese gasto} del historial.
+
+El cierre de mes se ejecuta mediante una acción explícita de \textbf{reseteo}, que desmarca la totalidad de los servicios para comenzar un nuevo ciclo de verificación. Cabe señalar que el estado de pago es un indicador único y no lleva asociado el mes al que corresponde: el sistema no conserva, por tanto, un registro de qué meses fueron pagados más allá de los gastos generados en el libro mayor, y el reseteo depende de que el usuario lo ejecute.

@@ -1,0 +1,41 @@
+\documentclass[12pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{geometry}
+\geometry{a4paper, margin=2.5cm}
+
+\title{Resumen del Proyecto: Aplicación de Gestión Financiera}
+\author{}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section{Acceso y Estructura Principal}
+La aplicación utiliza un sistema de \textbf{Autenticación Integrada con Google} (SSO) para el acceso seguro de los usuarios. 
+
+La navegación principal se gestiona a través de un menú lateral izquierdo compuesto por cuatro módulos:
+\begin{itemize}
+    \item \textbf{Gastos} (Módulo por defecto)
+    \item \textbf{Cuotas}
+    \item \textbf{Ahorros}
+    \item \textbf{Suscripciones}
+\end{itemize}
+
+\subsection{Plataformas}
+La aplicación mantiene \textbf{dos interfaces distintas} sobre la misma API: una versión de escritorio (menú lateral fijo) y una versión móvil (barra de navegación inferior), con rutas y pantallas propias. No son la misma vista adaptada: cada una tiene sus propios componentes y su nivel de funcionalidad puede diferir. \textbf{El desarrollo prioriza actualmente la versión de escritorio}, que es la que refleja el estado descrito en este documento; las diferencias vigentes de la versión móvil se detallan al final.
+
+\subsection{Gastos como Libro Mayor}
+Los cuatro módulos no son compartimentos aislados: \textbf{Cuotas y Suscripciones desembocan automáticamente en Gastos}. Al marcar el pago de una cuota o al confirmar el cobro de una suscripción, el sistema inserta por sí mismo el gasto correspondiente en el historial, etiquetado con su \textit{origen} (\texttt{manual}, \texttt{cuota} o \texttt{suscripcion}) y vinculado al registro que lo generó.
+
+Esta decisión cumple dos funciones. Reduce la carga de registro manual a un solo toque para todo el gasto recurrente y comprometido; y consolida en un único lugar el flujo de caja real del usuario, evitando que el gasto fijo quede invisible para el análisis. La contrapartida es que el análisis debe distinguir el gasto \textbf{discrecional} del \textbf{comprometido}, distinción que el módulo de Gastos resuelve mediante el campo \textit{origen}.
+
+El vínculo es bidireccional en lo que respecta a la corrección de errores: revertir el pago de una cuota o destildar una suscripción \textbf{elimina también el gasto que ese registro había generado}, porque se trata de un error de registro y no de un movimiento real. En cambio, si se elimina el producto o el servicio por completo, los gastos ya generados \textbf{permanecen} en el historial: ese dinero sí salió, y borrarlo falsearía el histórico.
+
+\input{Gastos}
+\input{Cuotas}
+\input{Ahorros}
+\input{Suscripciones}
+\input{Pendientes}
+\end{document}

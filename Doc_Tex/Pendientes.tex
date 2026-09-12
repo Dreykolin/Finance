@@ -1,0 +1,18 @@
+\section{Brechas Conocidas}
+Esta sección consigna las diferencias vigentes entre lo descrito en este documento y el estado de la implementación, con el fin de mantener la trazabilidad de lo pendiente.
+
+\subsection{Versión Móvil}
+El desarrollo prioriza la versión de escritorio, por lo que la versión móvil presenta actualmente las siguientes diferencias:
+\begin{itemize}
+    \item \textbf{Zoom temporal en Gastos:} la versión móvil incorpora un gráfico de evolución con gestos de \textit{pellizco} y arrastre que conmuta automáticamente entre granularidad mensual y diaria. La versión de escritorio no dispone de esta interacción, cuyo equivalente natural sería el desplazamiento con rueda y el arrastre del cursor.
+    \item \textbf{Ahorros sin visualización:} la versión móvil no incluye gráfico alguno en el módulo de Ahorros, por lo que las metas y la brecha de capital no son visualizables en ella.
+    \item \textbf{Edición de cuotas:} la funcionalidad de edición descrita en el módulo de Cuotas está disponible únicamente en la versión de escritorio.
+    \item \textbf{Duplicación de componentes:} el diagrama de anillo existe en dos implementaciones paralelas, una por plataforma, pendientes de unificación.
+\end{itemize}
+
+\subsection{Alcance del Modelo}
+\begin{itemize}
+    \item \textbf{Ausencia de ingresos:} el sistema registra egresos y ahorro, pero no contempla los ingresos del usuario. En consecuencia, el presupuesto mensual es un valor introducido manualmente y almacenado de forma local en cada dispositivo, sin sincronización entre ellos. La aplicación puede informar cuánto se ha gastado respecto de ese límite autoimpuesto, pero no si el mes cierra en equilibrio.
+    \item \textbf{Ausencia de edición en otros módulos:} gastos y suscripciones solo admiten alta y baja; su corrección exige eliminar y volver a crear el registro.
+    \item \textbf{Trazabilidad de registros previos:} los gastos generados con anterioridad a la incorporación del vínculo con su origen carecen de dicha referencia, por lo que la reversión automática no alcanza a los pagos marcados antes de ese cambio.
+\end{itemize}

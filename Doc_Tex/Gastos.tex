@@ -1,0 +1,23 @@
+\section{Módulo de Gastos}
+Al iniciar sesión, el usuario aterriza en el módulo de "Gastos". Esta sección cuenta con dos pestañas de navegación, abriendo por defecto la vista de \textbf{Análisis}.
+
+Este módulo opera además como \textbf{libro mayor} de la aplicación: recibe tanto los gastos registrados manualmente como los generados de forma automática por los módulos de Cuotas y Suscripciones.
+
+\subsection{Dashboard de Análisis}
+La pestaña de análisis está dedicada a la visualización de métricas financieras e integra actualmente dos componentes gráficos:
+
+\begin{enumerate}
+    \item \textbf{Evolución del Gasto (Gráfico de Líneas):}
+    Proyecta los gastos en una escala temporal mensual. Incluye una herramienta de control financiero que permite al usuario ajustar un umbral o límite de presupuesto para monitorear posibles sobregiros, dibujado como línea de referencia sobre la serie.
+
+    \item \textbf{Distribución del Gasto (Diagrama de Anillo):}
+    Implementado como un \textit{donut} interactivo: al seleccionar un segmento, o su entrada en la leyenda, éste se destaca y el centro del anillo muestra su porcentaje y su valor.
+
+    El componente responde a \textbf{dos preguntas distintas}, alternables mediante un conmutador, porque no son equivalentes:
+    \begin{itemize}
+        \item \textbf{Monto:} cuánto dinero se gastó con cada categoría.
+        \item \textbf{Frecuencia:} cuántos movimientos se registraron con cada una.
+    \end{itemize}
+
+    Las categorías no son únicamente los métodos de pago. Los gastos generados de forma automática por los otros módulos carecen de método de pago declarado, ya que no corresponden a una decisión de pago del momento sino a un compromiso previamente contraído; por ello se agrupan en categorías propias (\textbf{Cuotas} y \textbf{Suscripciones}) según su \textit{origen}. Así el gráfico separa el gasto \textbf{discrecional} del \textbf{comprometido}, en lugar de acumular ambos bajo una etiqueta vacía. Los movimientos manuales sin método de pago quedan fuera del gráfico y se informan como nota al pie del mismo.
+\end{enumerate}

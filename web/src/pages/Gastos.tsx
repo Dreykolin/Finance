@@ -1,19 +1,19 @@
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { Settings, Trash2, ChevronDown } from 'lucide-react'
 import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement,
-  LineElement, BarElement, Title, Tooltip, Legend, Filler,
+  LineElement, Title, Tooltip, Legend, Filler,
 } from 'chart.js'
-import { Line, Bar } from 'react-chartjs-2'
+import { Line } from 'react-chartjs-2'
 import { useGastos } from '../store/useGastos'
 import ChartContainer from '../components/ChartContainer'
+import Donut, { type DonutSlice } from '../components/Donut'
 import Modal from '../components/Modal'
 import { formatCLP, formatFecha, mesLabel } from '../lib/format'
-import type { Gasto } from '../types'
+import { METODOS, ORIGEN_LABEL, colorFor } from '../lib/colors'
+import type { Gasto, NuevoGasto } from '../types'
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend, Filler)
-
-const METODOS = ['Efectivo', 'Débito', 'Crédito', 'Transferencia']
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler)
 
 const CHART_OPTS_BASE = {
   responsive: true,
@@ -134,13 +134,6 @@ function AnalisisTab({ gastos, presupuesto }: { gastos: Gasto[], presupuesto: nu
   const labelsLinea = meses.map(mesLabel)
   const dataLinea = meses.map(m => porMes[m])
 
-  // Agrupar por método de pago
-  const porMetodo: Record<string, number> = {}
-  gastos.forEach(g => {
-    porMetodo[g.metodoPago] = (porMetodo[g.metodoPago] ?? 0) + g.monto
-  })
-  const labelsBar = Object.keys(porMetodo)
-  const dataBar   = Object.values(porMetodo)
 
   const lineData = {
     labels: labelsLinea,
@@ -166,17 +159,6 @@ function AnalisisTab({ gastos, presupuesto }: { gastos: Gasto[], presupuesto: nu
     ],
   }
 
-  const barData = {
-    labels: labelsBar,
-    datasets: [{
-      data: dataBar,
-      backgroundColor: 'rgba(139,92,246,0.6)',
-      borderColor: '#8b5cf6',
-      borderWidth: 1,
-      borderRadius: 6,
-    }],
-  }
-
   const lineOpts = {
     ...CHART_OPTS_BASE,
     plugins: {
@@ -194,10 +176,74 @@ function AnalisisTab({ gastos, presupuesto }: { gastos: Gasto[], presupuesto: nu
       <ChartContainer title="Tendencia Mensual">
         <Line data={lineData} options={lineOpts as never} />
       </ChartContainer>
-      <ChartContainer title="Distribución por Método">
-        <Bar data={barData} options={CHART_OPTS_BASE as never} />
-      </ChartContainer>
+      <DistribucionCard gastos={gastos} />
     </>
+  )
+}
+
+/**
+ * Distribución del gasto por categoría de pago.
+ *
+ * Las compras auto-generadas (marcar una cuota, pagar una suscripción) se insertan
+ * sin método de pago, así que se agrupan por su `origen` en vez de acumularse en
+ * una etiqueta vacía. Eso además separa el gasto comprometido del discrecional.
+ *
+ * El toggle cambia la pregunta: "cuánto gasté con cada medio" (monto) frente a
+ * "con qué frecuencia lo uso" (número de movimientos).
+ */
+function DistribucionCard({ gastos }: { gastos: Gasto[] }) {
+  const [modo, setModo] = useState<'monto' | 'frecuencia'>('monto')
+
+  const acc: Record<string, { monto: number; usos: number }> = {}
+  gastos.forEach(g => {
+    const cat = ORIGEN_LABEL[g.origen] ?? g.metodoPago ?? ''
+    if (!cat) return // gasto manual sin método declarado: no clasificable
+    acc[cat] ??= { monto: 0, usos: 0 }
+    acc[cat].monto += g.monto
+    acc[cat].usos  += 1
+  })
+
+  const slices: DonutSlice[] = Object.entries(acc)
+    .map(([label, v]) => ({ label, value: modo === 'monto' ? v.monto : v.usos }))
+    .sort((a, b) => b.value - a.value)
+    .map((s, i) => ({ ...s, color: colorFor(s.label, i) }))
+
+  const sinClasificar = gastos.filter(g => !ORIGEN_LABEL[g.origen] && !g.metodoPago).length
+
+  return (
+    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl py-5">
+      <div className="flex items-center justify-between px-5 mb-4 gap-3">
+        <p className="text-zinc-500 text-[10px] font-extrabold tracking-widest uppercase">
+          Distribución del Gasto
+        </p>
+        <div className="flex bg-zinc-950 border border-zinc-800 rounded-lg p-0.5">
+          {(['monto', 'frecuencia'] as const).map(m => (
+            <button
+              key={m}
+              onClick={() => setModo(m)}
+              className={`px-2.5 py-1 rounded-md text-[11px] font-bold capitalize transition-colors ${
+                modo === m ? 'bg-accent text-white' : 'text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              {m}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="px-5">
+        <Donut
+          slices={slices}
+          label={modo === 'monto' ? 'del total' : 'de los usos'}
+          formatValue={v => modo === 'monto' ? formatCLP(v) : `${v} ${v === 1 ? 'uso' : 'usos'}`}
+        />
+        {sinClasificar > 0 && (
+          <p className="text-zinc-600 text-xs mt-4">
+            {sinClasificar} {sinClasificar === 1 ? 'movimiento' : 'movimientos'} sin método de pago
+            {' '}{sinClasificar === 1 ? 'quedó' : 'quedaron'} fuera del gráfico.
+          </p>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -205,7 +251,7 @@ function HistorialTab({
   gastos, onAgregar, onEliminar,
 }: {
   gastos: Gasto[]
-  onAgregar: (g: Omit<Gasto, 'id'>) => void
+  onAgregar: (g: NuevoGasto) => void
   onEliminar: (id: number) => void
 }) {
   const [showForm, setShowForm] = useState(false)
@@ -320,7 +366,7 @@ function HistorialTab({
 function FormNuevoGasto({
   onSave, onCancel,
 }: {
-  onSave: (g: Omit<Gasto, 'id'>) => void
+  onSave: (g: NuevoGasto) => void
   onCancel: () => void
 }) {
   const [descripcion, setDescripcion] = useState('')

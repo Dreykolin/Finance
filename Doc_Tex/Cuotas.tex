@@ -1,0 +1,22 @@
+\section{Módulo de Cuotas}
+Este módulo está diseñado para llevar un seguimiento preciso de las compras realizadas a plazo. El enfoque del modelo de datos prioriza el flujo de caja recurrente sobre la deuda histórica: 	extbf{el sistema no almacena el precio original de la compra}, sino únicamente el número de cuotas y el valor de cada una.
+
+Las cifras agregadas que muestra la interfaz (total a pagar, abonado y deuda pendiente) se 	extbf{derivan} de esos dos datos como 	extit{cuotas} $	imes$ 	extit{valor}. Conviene notar que esa multiplicación no equivale al precio de lista del producto, ya que incorpora los intereses del financiamiento: representa el desembolso total comprometido, que es la magnitud relevante para el flujo de caja.
+
+\subsection{Registro de Elementos}
+Para dar de alta un nuevo pago en cuotas, el usuario debe registrar la siguiente información del producto:
+\begin{itemize}
+    \item \textbf{Producto:} Nombre o descripción de la compra.
+    \item \textbf{Tienda:} Comercio o entidad donde se adquirió.
+    \item \textbf{Cantidad de cuotas:} Número total de pagos acordados.
+    \item \textbf{Valor de la cuota:} Monto recurrente a pagar en cada periodo.
+\end{itemize}
+
+\subsection{Gestión e Interacción}
+La interfaz permite interactuar con cada registro listado. Al presionar sobre un elemento, se despliega un menú de acciones para gestionar el estado de la deuda:
+\begin{itemize}
+    \item \textbf{Marcar cuota:} Acción rápida que registra un pago efectuado, incrementando el contador de cuotas pagadas y actualizando el progreso.
+    \item \textbf{Editar:} Permite la modificación integral del registro. El usuario puede actualizar el producto, la tienda, el total de cuotas, el valor de las mismas y el \textbf{número de cuotas pagadas}. Esta última propiedad es crucial para brindar flexibilidad, permitiendo revertir acciones en caso de presionar "Marcar cuota" por accidente.
+    Al reducir el contador de cuotas pagadas, el sistema \textbf{elimina también los gastos que esos marcados habían generado} en el libro mayor, de modo que la corrección no deje movimientos fantasma en el historial. El formulario advierte de ello antes de confirmar. El módulo ofrece además un atajo de \textit{Deshacer última cuota} para el caso más frecuente, que evita abrir el formulario completo.
+    \item \textbf{Eliminar:} Borra el registro de la base de datos de forma permanente. Los gastos ya generados por el producto \textbf{se conservan} en el historial, puesto que corresponden a dinero efectivamente desembolsado; únicamente pierden la trazabilidad hacia el producto de origen.
+\end{itemize}

@@ -4,7 +4,12 @@ export interface Gasto {
   metodoPago: string;
   monto: number;
   fecha: string; // YYYY-MM-DD
+  /** 'manual' | 'cuota' | 'suscripcion' — las dos últimas se generan solas. */
+  origen: string;
 }
+
+/** Lo que el cliente envía al crear un gasto: `origen` lo asigna el servidor. */
+export type NuevoGasto = Omit<Gasto, 'id' | 'origen'>;
 
 export interface CompraCuotas {
   id: number;

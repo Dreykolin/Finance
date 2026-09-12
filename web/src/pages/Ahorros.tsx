@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Flag, Plus, Trash2, CheckCircle, Circle } from 'lucide-react'
 import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement,
-  LineElement, Title, Tooltip, Filler,
+  LineElement, Title, Tooltip, Legend, Filler,
 } from 'chart.js'
 import { Line } from 'react-chartjs-2'
 import { useAhorros, useMetas } from '../store/useAhorros'
@@ -11,7 +11,16 @@ import Modal from '../components/Modal'
 import { formatCLP, formatFecha, mesLabel } from '../lib/format'
 import type { Ahorro, MetaAhorro } from '../types'
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Filler)
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler)
+
+// Una línea de umbral por meta, en orden de cercanía.
+const META_COLORS = [
+  'rgba(16,185,129,0.75)',
+  'rgba(56,189,248,0.7)',
+  'rgba(251,191,36,0.7)',
+  'rgba(244,114,182,0.7)',
+  'rgba(148,163,184,0.65)',
+]
 
 export default function Ahorros() {
   const { ahorros, agregar: agregarAhorro, eliminar: eliminarAhorro } = useAhorros()
@@ -26,10 +35,12 @@ export default function Ahorros() {
   // Total actual
   const totalActual = ahorros.reduce((s, a) => s + (a.esRetiro ? -a.monto : a.monto), 0)
 
-  // Primera meta activa (menor monto objetivo)
-  const metaActiva = metas
+  // Todas las metas pendientes, de la más cercana a la más lejana.
+  // Cada una se dibuja como su propia línea de umbral en el gráfico.
+  const metasActivas = metas
     .filter(m => !m.completada)
-    .reduce((min: MetaAhorro | null, m) => (!min || m.montoObjetivo < min.montoObjetivo ? m : min), null)
+    .sort((a, b) => a.montoObjetivo - b.montoObjetivo)
+  const proximaMeta = metasActivas[0] ?? null
 
   // Datos del gráfico: acumulado a lo largo del tiempo
   const sortedAhorros = [...ahorros].sort((a, b) => a.fecha.localeCompare(b.fecha))
@@ -55,25 +66,48 @@ export default function Ahorros() {
         pointBackgroundColor: '#8b5cf6',
         pointRadius: 4,
       },
-      ...(metaActiva ? [{
-        data: Array(mesesOrdenados.length).fill(metaActiva.montoObjetivo),
-        borderColor: 'rgba(16,185,129,0.6)',
+      ...metasActivas.map((m, i) => ({
+        data: Array(mesesOrdenados.length).fill(m.montoObjetivo),
+        borderColor: META_COLORS[i % META_COLORS.length],
         borderDash: [5, 4],
         borderWidth: 1.5,
         pointRadius: 0,
         fill: false,
-        label: metaActiva.nombre,
-      }] : []),
+        label: `${m.nombre} · ${formatCLP(m.montoObjetivo)}`,
+      })),
     ],
   }
+
+  // El eje tiene que llegar por encima de la meta más alta, o las líneas de
+  // umbral quedan fuera del área visible y la brecha no se puede leer.
+  const techo = Math.max(
+    totalActual,
+    ...metasActivas.map(m => m.montoObjetivo),
+    ...mesesOrdenados.map(m => porMes[m]),
+    1,
+  )
 
   const chartOpts = {
     responsive: true,
     maintainAspectRatio: true,
-    plugins: { legend: { display: false } },
+    plugins: {
+      legend: {
+        display: metasActivas.length > 0,
+        position: 'bottom' as const,
+        labels: {
+          color: '#a1a1aa',
+          boxWidth: 12,
+          boxHeight: 2,
+          font: { size: 11 },
+          // El dataset 0 es el capital acumulado: no necesita entrada de leyenda.
+          filter: (item: { datasetIndex: number }) => item.datasetIndex !== 0,
+        },
+      },
+    },
     scales: {
       x: { ticks: { color: '#71717a', font: { size: 11 } }, grid: { color: 'rgba(63,63,70,0.5)' } },
       y: {
+        suggestedMax: techo * 1.1,
         ticks: { color: '#71717a', font: { size: 11 }, callback: (v: number) => `$${(v/1000).toFixed(0)}k` },
         grid: { color: 'rgba(63,63,70,0.5)' },
       },
@@ -109,11 +143,19 @@ export default function Ahorros() {
               {formatCLP(totalActual)}
             </p>
           </div>
-          {metaActiva && (
+          {proximaMeta && (
             <div className="text-right">
-              <p className="text-zinc-600 text-xs">Meta activa</p>
-              <p className="text-emerald-500 text-sm font-bold mt-0.5">{metaActiva.nombre}</p>
-              <p className="text-zinc-500 text-xs">{formatCLP(metaActiva.montoObjetivo)}</p>
+              <p className="text-zinc-600 text-xs">
+                Próxima meta{metasActivas.length > 1 ? ` · ${metasActivas.length} activas` : ''}
+              </p>
+              <p className="text-emerald-500 text-sm font-bold mt-0.5">{proximaMeta.nombre}</p>
+              {totalActual >= proximaMeta.montoObjetivo ? (
+                <p className="text-emerald-400 text-xs font-bold">¡Alcanzada!</p>
+              ) : (
+                <p className="text-zinc-500 text-xs">
+                  faltan {formatCLP(proximaMeta.montoObjetivo - totalActual)}
+                </p>
+              )}
             </div>
           )}
         </div>

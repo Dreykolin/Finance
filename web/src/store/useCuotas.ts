@@ -39,10 +39,25 @@ export function useCuotas() {
     setCuotas(prev => prev.filter(c => c.id !== id))
   }
 
+  /**
+   * Edita el registro, incluidas las cuotas ya pagadas. Bajar `cuotasPagadas`
+   * revierte pagos: el backend borra las compras auto-generadas asociadas.
+   */
+  async function editar(id: number, c: Partial<Omit<CompraCuotas, 'id'>>) {
+    const updated = await api.patch<any>(`/cuotas/${id}`, {
+      nombre_producto: c.producto,
+      tienda:          c.tienda,
+      cuotas_totales:  c.cuotasTotales,
+      monto_cuota:     c.montoCuota,
+      cuotas_pagadas:  c.cuotasPagadas,
+    })
+    setCuotas(prev => prev.map(x => x.id === id ? mapCuota(updated) : x))
+  }
+
   async function marcarCuota(id: number) {
     const updated = await api.post<any>(`/cuotas/${id}/marcar`)
     setCuotas(prev => prev.map(c => c.id === id ? mapCuota(updated) : c))
   }
 
-  return { cuotas, agregar, eliminar, marcarCuota }
+  return { cuotas, agregar, editar, eliminar, marcarCuota }
 }

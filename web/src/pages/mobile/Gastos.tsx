@@ -3,7 +3,7 @@ import { Settings, Trash2, ChevronLeft, ChevronRight, Maximize2, X } from 'lucid
 import { useGastos } from '../../store/useGastos'
 import { formatCLP, formatFecha } from '../../lib/format'
 import Modal from '../../components/Modal'
-import type { Gasto } from '../../types'
+import type { Gasto, NuevoGasto } from '../../types'
 
 const METODOS = ['Efectivo', 'Débito', 'Crédito', 'Transferencia']
 
@@ -744,7 +744,7 @@ function GastoRow({ g, onDelete }: { g: Gasto; onDelete: () => void }) {
   )
 }
 
-function FormGasto({ onSave }: { onSave: (g: Omit<Gasto, 'id'>) => void }) {
+function FormGasto({ onSave }: { onSave: (g: NuevoGasto) => void }) {
   const [descripcion, setDescripcion] = useState('')
   const [monto, setMonto]             = useState('')
   const [fecha, setFecha]             = useState(new Date().toISOString().slice(0, 10))

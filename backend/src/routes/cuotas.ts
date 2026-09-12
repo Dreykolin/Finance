@@ -46,8 +46,8 @@ router.post('/:id/marcar', async (req, res) => {
     await client.query('BEGIN')
     await client.query('UPDATE cuotas SET cuotas_pagadas = $1 WHERE id = $2', [nuevasPagadas, cuota.id])
     await client.query(
-      "INSERT INTO compras (id_usuario, detalles, monto, fecha, origen) VALUES ($1,$2,$3,$4,'cuota')",
-      [req.user!.id, detalles, cuota.monto_cuota, fecha]
+      "INSERT INTO compras (id_usuario, detalles, monto, fecha, origen, id_cuota) VALUES ($1,$2,$3,$4,'cuota',$5)",
+      [req.user!.id, detalles, cuota.monto_cuota, fecha, cuota.id]
     )
     await client.query('COMMIT')
   } catch (e) {
@@ -58,6 +58,74 @@ router.post('/:id/marcar', async (req, res) => {
 
   const updated = await pool.query('SELECT * FROM cuotas WHERE id = $1', [cuota.id])
   res.json(updated.rows[0])
+})
+
+// Editar un registro completo, incluidas las cuotas ya pagadas.
+// Bajar cuotas_pagadas revierte los pagos: borra las compras auto-generadas
+// correspondientes, porque esos pagos nunca ocurrieron (fueron un error de registro).
+router.patch('/:id', async (req, res) => {
+  const client = await pool.connect()
+  try {
+    const { rows } = await client.query(
+      'SELECT * FROM cuotas WHERE id = $1 AND id_usuario = $2',
+      [req.params.id, req.user!.id]
+    )
+    const cuota = rows[0]
+    if (!cuota) { res.status(404).json({ error: 'No encontrado' }); return }
+
+    const nombre_producto = req.body.nombre_producto ?? cuota.nombre_producto
+    const tienda          = req.body.tienda          ?? cuota.tienda
+    const cuotas_totales  = Number(req.body.cuotas_totales  ?? cuota.cuotas_totales)
+    const monto_cuota     = Number(req.body.monto_cuota     ?? cuota.monto_cuota)
+    const cuotas_pagadas  = Number(req.body.cuotas_pagadas  ?? cuota.cuotas_pagadas)
+
+    if (!nombre_producto || !tienda) {
+      res.status(400).json({ error: 'Producto y tienda son obligatorios' }); return
+    }
+    if (!Number.isInteger(cuotas_totales) || cuotas_totales < 1) {
+      res.status(400).json({ error: 'El total de cuotas debe ser al menos 1' }); return
+    }
+    if (!Number.isInteger(monto_cuota) || monto_cuota < 0) {
+      res.status(400).json({ error: 'Monto de cuota inválido' }); return
+    }
+    if (!Number.isInteger(cuotas_pagadas) || cuotas_pagadas < 0) {
+      res.status(400).json({ error: 'Cuotas pagadas inválidas' }); return
+    }
+    if (cuotas_pagadas > cuotas_totales) {
+      res.status(400).json({ error: 'Las cuotas pagadas no pueden superar el total' }); return
+    }
+
+    const revertidas = cuota.cuotas_pagadas - cuotas_pagadas
+
+    await client.query('BEGIN')
+    await client.query(
+      `UPDATE cuotas SET nombre_producto = $1, tienda = $2, cuotas_totales = $3,
+              monto_cuota = $4, cuotas_pagadas = $5
+       WHERE id = $6`,
+      [nombre_producto, tienda, cuotas_totales, monto_cuota, cuotas_pagadas, cuota.id]
+    )
+    if (revertidas > 0) {
+      await client.query(
+        `DELETE FROM compras WHERE id IN (
+           SELECT id FROM compras
+           WHERE id_cuota = $1 AND id_usuario = $2 AND origen = 'cuota'
+           ORDER BY fecha DESC, id DESC
+           LIMIT $3
+         )`,
+        [cuota.id, req.user!.id, revertidas]
+      )
+    }
+    await client.query('COMMIT')
+
+    const updated = await client.query('SELECT * FROM cuotas WHERE id = $1', [cuota.id])
+    res.json(updated.rows[0])
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {})
+    console.error('PATCH /cuotas/:id', e)
+    res.status(500).json({ error: 'No se pudo actualizar' })
+  } finally {
+    client.release()
+  }
 })
 
 router.delete('/:id', async (req, res) => {

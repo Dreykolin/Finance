@@ -57,6 +57,14 @@ export async function initDb() {
 
     ALTER TABLE reservas ADD COLUMN IF NOT EXISTS completada BOOLEAN NOT NULL DEFAULT FALSE;
 
+    -- Vínculo de las compras auto-generadas con su origen.
+    -- SET NULL (no CASCADE): si se borra el producto, el pago ya ocurrió y debe
+    -- seguir en el historial de gastos; solo pierde la trazabilidad.
+    ALTER TABLE compras ADD COLUMN IF NOT EXISTS id_cuota
+      INTEGER REFERENCES cuotas(id) ON DELETE SET NULL;
+    ALTER TABLE compras ADD COLUMN IF NOT EXISTS id_suscripcion
+      INTEGER REFERENCES suscripciones(id) ON DELETE SET NULL;
+
     CREATE TABLE IF NOT EXISTS depositos_reservas (
       id          SERIAL PRIMARY KEY,
       id_reserva  INTEGER NOT NULL REFERENCES reservas(id) ON DELETE CASCADE,
