@@ -3,7 +3,49 @@ import { Trash2, Plus, CheckCircle, Circle } from 'lucide-react'
 import { useAhorros, useMetas } from '../../store/useAhorros'
 import { formatCLP, formatFecha } from '../../lib/format'
 import Modal from '../../components/Modal'
+import StatTile from '../../components/StatTile'
+import ColumnasMensuales, { type PuntoMes } from '../../components/ColumnasMensuales'
+import { Card, SectionLabel } from '../../components/ui'
 import type { Ahorro, MetaAhorro } from '../../types'
+
+const MESES_CORTOS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+
+/**
+ * Saldo acumulado al cierre de cada uno de los últimos meses. El móvil no tenía
+ * ninguna representación del ahorro en el tiempo: sin ella, la pantalla solo
+ * decía cuánto hay, nunca si está creciendo.
+ */
+function saldoPorMes(ahorros: Ahorro[], meses = 6): PuntoMes[] {
+  if (ahorros.length === 0) return []
+  const hoy = new Date()
+  const out: PuntoMes[] = []
+
+  for (let i = meses - 1; i >= 0; i--) {
+    const d = new Date(hoy.getFullYear(), hoy.getMonth() - i + 1, 0) // último día del mes
+    const corte = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-31`
+    const saldo = ahorros
+      .filter(a => a.fecha <= corte)
+      .reduce((t, a) => t + (a.esRetiro ? -a.monto : a.monto), 0)
+    out.push({
+      clave: `${d.getFullYear()}-${d.getMonth() + 1}`,
+      etiqueta: MESES_CORTOS[d.getMonth()],
+      valor: Math.max(saldo, 0),
+      detalle: saldo < 0 ? 'saldo negativo' : undefined,
+    })
+  }
+  return out
+}
+
+/** Neto por mes, sobre los meses con movimiento: los quietos no son ritmo. */
+function ritmoMensual(ahorros: Ahorro[]): number {
+  const porMes: Record<string, number> = {}
+  ahorros.forEach(a => {
+    const m = a.fecha.slice(0, 7)
+    porMes[m] = (porMes[m] ?? 0) + (a.esRetiro ? -a.monto : a.monto)
+  })
+  const v = Object.values(porMes)
+  return v.length === 0 ? 0 : Math.round(v.reduce((x, y) => x + y, 0) / v.length)
+}
 
 export default function MobileAhorros() {
   const { ahorros, agregar: agregarAhorro, eliminar: eliminarAhorro } = useAhorros()
@@ -18,6 +60,10 @@ export default function MobileAhorros() {
 
   const total      = ahorros.reduce((s, a) => s + (a.esRetiro ? -a.monto : a.monto), 0)
   const metaActiva = metas.filter(m => !m.completada).sort((a, b) => a.montoObjetivo - b.montoObjetivo)[0] ?? null
+  const evolucion  = saldoPorMes(ahorros)
+  const ritmo      = ritmoMensual(ahorros)
+  const falta      = metaActiva ? metaActiva.montoObjetivo - total : 0
+  const mesesMeta  = metaActiva && falta > 0 && ritmo > 0 ? Math.ceil(falta / ritmo) : null
 
   return (
     <div className="min-h-full bg-zinc-950 flex flex-col">
@@ -62,6 +108,34 @@ export default function MobileAhorros() {
             </button>
           </div>
         </div>
+      </div>
+
+      <div className="px-4 pb-4 flex flex-col gap-3">
+        <div className="grid grid-cols-2 gap-3">
+          <StatTile
+            etiqueta="Ritmo mensual"
+            valor={ritmo !== 0 ? `${ritmo > 0 ? '+' : ''}${formatCLP(ritmo)}` : '—'}
+            nota="Promedio con movimiento"
+          />
+          <StatTile
+            etiqueta={metaActiva ? 'Falta para la meta' : 'Próxima meta'}
+            valor={!metaActiva ? '—' : falta <= 0 ? '¡Alcanzada!' : formatCLP(falta)}
+            nota={mesesMeta !== null
+              ? `${mesesMeta} ${mesesMeta === 1 ? 'mes' : 'meses'} a este ritmo`
+              : metaActiva ? undefined : 'Define una meta'}
+          />
+        </div>
+
+        {evolucion.length > 0 && (
+          <Card tipo="grafico">
+            <div className="px-4 mb-2">
+              <SectionLabel>Evolución del saldo</SectionLabel>
+            </div>
+            <div className="px-1">
+              <ColumnasMensuales puntos={evolucion} formatear={formatCLP} />
+            </div>
+          </Card>
+        )}
       </div>
 
       {/* Tabs */}

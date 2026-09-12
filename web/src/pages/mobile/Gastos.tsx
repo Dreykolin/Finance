@@ -3,25 +3,12 @@ import { Settings, Trash2, ChevronLeft, ChevronRight, Maximize2, X } from 'lucid
 import { useGastos } from '../../store/useGastos'
 import { formatCLP, formatFecha } from '../../lib/format'
 import Modal from '../../components/Modal'
+import Donut, { type DonutSlice } from '../../components/Donut'
+import StatTile from '../../components/StatTile'
+import { Card, SectionLabel, Button, INPUT } from '../../components/ui'
+import { METODOS, TIPO_LABEL, TIPOS, SIN_METODO, SECUENCIAL, colorFor, ordenCanonico } from '../../lib/colors'
 import type { Gasto, NuevoGasto } from '../../types'
 
-const METODOS = ['Efectivo', 'Débito', 'Crédito', 'Transferencia']
-
-const METODO_BADGE: Record<string, string> = {
-  'Efectivo':      'bg-emerald-500/20 text-emerald-400',
-  'Débito':        'bg-blue-500/20 text-blue-400',
-  'Crédito':       'bg-purple-500/20 text-purple-400',
-  'Transferencia': 'bg-orange-500/20 text-orange-400',
-  '':              'bg-zinc-800 text-zinc-500',
-}
-
-const METODO_FILL: Record<string, string> = {
-  'Efectivo':      '#10b981',
-  'Débito':        '#3b82f6',
-  'Crédito':       '#8b5cf6',
-  'Transferencia': '#f97316',
-}
-const EXTRA_COLORS = ['#ec4899', '#14b8a6', '#eab308', '#6366f1']
 
 function getMes(offset: number) {
   const d = new Date()
@@ -52,108 +39,49 @@ function fmtMil(v: number) {
   return v >= 1000 ? `${Math.round(v / 1000)}mil` : String(Math.round(v))
 }
 
-// ── Donut chart ────────────────────────────────────────────────────────────
-function donutArc(cx: number, cy: number, R: number, r: number, a1: number, a2: number) {
-  const cos = Math.cos, sin = Math.sin
-  const large = a2 - a1 > Math.PI ? 1 : 0
-  const x1 = cx + R * cos(a1), y1 = cy + R * sin(a1)
-  const x2 = cx + R * cos(a2), y2 = cy + R * sin(a2)
-  const x3 = cx + r * cos(a2), y3 = cy + r * sin(a2)
-  const x4 = cx + r * cos(a1), y4 = cy + r * sin(a1)
-  return `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${R} ${R} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} L ${x3.toFixed(2)} ${y3.toFixed(2)} A ${r} ${r} 0 ${large} 0 ${x4.toFixed(2)} ${y4.toFixed(2)} Z`
-}
+/**
+ * Distribución del gasto. Comparte componente y paleta con la versión de
+ * escritorio: tener aquí una copia de los colores fue justo lo que hizo que
+ * crédito y débito acabaran siendo indistinguibles en esta pantalla.
+ *
+ * El conmutador de eje va debajo del título y no al lado, que a este ancho no cabe.
+ */
+function DistribucionMovil({ gastos, etiqueta }: { gastos: Gasto[]; etiqueta?: string }) {
+  const [eje, setEje] = useState<'metodo' | 'tipo'>('metodo')
 
-interface DonutSlice { label: string; value: number; color: string }
-
-function DonutChart({ slices, total, label }: { slices: DonutSlice[]; total: number; label?: string }) {
-  const [active, setActive] = useState<number | null>(null)
-  const cx = 80, cy = 80, R = 68, r = 46
-  const gap = 0.03
-
-  let angle = -Math.PI / 2
-  const arcs = slices.map(s => {
-    const sweep = (s.value / total) * (2 * Math.PI) - gap
-    const a1 = angle + gap / 2
-    const a2 = a1 + sweep
-    angle += (s.value / total) * (2 * Math.PI)
-    return { ...s, a1, a2, pct: Math.round((s.value / total) * 100) }
+  const acc: Record<string, { monto: number; usos: number }> = {}
+  gastos.forEach(g => {
+    const cat = eje === 'tipo'
+      ? (TIPO_LABEL[g.origen] ?? TIPO_LABEL.manual)
+      : (g.metodoPago || SIN_METODO)
+    acc[cat] ??= { monto: 0, usos: 0 }
+    acc[cat].monto += g.monto
+    acc[cat].usos  += 1
   })
 
-  const shown = active !== null ? arcs[active] : null
-
-  return (
-    <div className="flex items-center gap-4">
-      {/* Donut */}
-      <div className="flex-shrink-0">
-        <svg viewBox="0 0 160 160" width="140" height="140">
-          {arcs.map((arc, i) => (
-            <path key={arc.label} d={donutArc(cx, cy, active === i ? R + 5 : R, r, arc.a1, arc.a2)}
-              fill={arc.color} opacity={active !== null && active !== i ? 0.35 : 1}
-              style={{ transition: 'all 0.2s', cursor: 'pointer' }}
-              onClick={() => setActive(active === i ? null : i)} />
-          ))}
-          {/* Center label */}
-          <text x={cx} y={cy - 8} textAnchor="middle" fontSize="18" fontWeight="bold" fill="white">
-            {shown ? `${shown.pct}%` : ''}
-          </text>
-          <text x={cx} y={cy + 10} textAnchor="middle" fontSize="9" fill="#71717a">
-            {shown ? shown.label : label ?? ''}
-          </text>
-          <text x={cx} y={cy + 24} textAnchor="middle" fontSize="9" fill="#a1a1aa">
-            {shown ? formatCLP(shown.value) : ''}
-          </text>
-        </svg>
-      </div>
-
-      {/* Legend */}
-      <div className="flex-1 flex flex-col gap-2.5">
-        {arcs.map((arc, i) => (
-          <button key={arc.label} onClick={() => setActive(active === i ? null : i)}
-            className={`flex items-center gap-2.5 text-left transition-opacity ${active !== null && active !== i ? 'opacity-35' : ''}`}>
-            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: arc.color }} />
-            <span className="flex-1 text-xs text-zinc-300 font-medium">{arc.label}</span>
-            <span className="text-xs font-bold text-white">{arc.pct}%</span>
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function MetodosDonut({ gastos, label }: { gastos: Gasto[]; label?: string }) {
-  const byMetodo: Record<string, number> = {}
-  gastos.filter(g => g.metodoPago).forEach(g => {
-    byMetodo[g.metodoPago] = (byMetodo[g.metodoPago] ?? 0) + g.monto
-  })
-  const entries = Object.entries(byMetodo).sort(([, a], [, b]) => b - a)
-  const total = entries.reduce((s, [, v]) => s + v, 0)
-
-  if (entries.length === 0 || total === 0) return (
-    <div className="py-10 flex items-center justify-center text-zinc-600 text-sm italic">Sin datos</div>
-  )
-
-  const slices: DonutSlice[] = entries.map(([m, v], i) => ({
-    label: m,
-    value: v,
-    color: METODO_FILL[m] ?? EXTRA_COLORS[i % EXTRA_COLORS.length],
+  const orden = eje === 'tipo' ? TIPOS : METODOS
+  const slices: DonutSlice[] = ordenCanonico(Object.keys(acc), orden).map(label => ({
+    label,
+    value: acc[label].monto,
+    color: colorFor(label),
   }))
 
   return (
-    <div className="flex flex-col gap-4">
-      <DonutChart slices={slices} total={total} label={label} />
-      {/* Totals row */}
-      <div className="border-t border-zinc-800 pt-3 flex flex-col gap-1.5">
-        {entries.map(([m, v]) => (
-          <div key={m} className="flex justify-between items-center">
-            <span className="text-zinc-500 text-xs">{m}</span>
-            <span className="text-white text-xs font-bold">{formatCLP(v)}</span>
-          </div>
+    <div className="flex flex-col gap-3">
+      <div className="flex bg-zinc-950 border border-zinc-800 rounded-lg p-0.5 self-start">
+        {(['metodo', 'tipo'] as const).map(e => (
+          <button
+            key={e}
+            onClick={() => setEje(e)}
+            className={`px-3 py-1 rounded-md text-[11px] font-bold transition-colors ${
+              eje === e ? 'bg-accent text-white' : 'text-zinc-500'
+            }`}
+          >
+            {e === 'metodo' ? 'método' : 'tipo'}
+          </button>
         ))}
-        <div className="flex justify-between items-center pt-1 border-t border-zinc-800 mt-1">
-          <span className="text-zinc-400 text-xs font-bold">Total</span>
-          <span className="text-white text-xs font-bold">{formatCLP(total)}</span>
-        </div>
       </div>
+      <Donut slices={slices} label={etiqueta} formatValue={formatCLP} size={150} />
     </div>
   )
 }
@@ -230,8 +158,8 @@ function renderChart(
     <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} className="w-full select-none" style={style}>
       <defs>
         <linearGradient id="tGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.25" />
-          <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0" />
+          <stop offset="0%" stopColor={SECUENCIAL.fuerte} stopOpacity="0.25" />
+          <stop offset="100%" stopColor={SECUENCIAL.fuerte} stopOpacity="0" />
         </linearGradient>
         <clipPath id="chartClip">
           <rect x={PL} y={PT} width={gW} height={gH} />
@@ -257,7 +185,7 @@ function renderChart(
 
       <g clipPath="url(#chartClip)">
         {areaD && <path d={areaD} fill="url(#tGrad)" />}
-        {pathD && <path d={pathD} fill="none" stroke="#8b5cf6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
+        {pathD && <path d={pathD} fill="none" stroke={SECUENCIAL.fuerte} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
       </g>
 
       {pts.map(pt => {
@@ -270,7 +198,7 @@ function renderChart(
             {sy >= PT && sy <= PT + gH && (
               <>
                 <circle cx={sx} cy={sy} r={sel ? 7 : 5} fill="#09090b" />
-                <circle cx={sx} cy={sy} r={sel ? 7 : 5} fill="none" stroke={sel ? 'white' : '#8b5cf6'} strokeWidth={sel ? 2.5 : 2} />
+                <circle cx={sx} cy={sy} r={sel ? 7 : 5} fill="none" stroke={sel ? 'white' : SECUENCIAL.fuerte} strokeWidth={sel ? 2.5 : 2} />
                 {sel && (
                   <g>
                     <rect x={sx-40} y={sy-32} width="80" height="22" rx="5" fill="#27272a" />
@@ -510,10 +438,10 @@ function DonutSlider({ gastos, delMes, mesActual, mesOffset, rangoMes, onPrev, o
         }}
       >
         <div className="flex-shrink-0 w-full snap-start px-5 pb-5">
-          <MetodosDonut gastos={gastos} label="histórico" />
+          <DistribucionMovil gastos={gastos} etiqueta="histórico" />
         </div>
         <div className="flex-shrink-0 w-full snap-start px-5 pb-5">
-          <MetodosDonut gastos={delMes} label={mesNombre(mesActual)} />
+          <DistribucionMovil gastos={delMes} etiqueta={mesNombre(mesActual)} />
         </div>
       </div>
 
@@ -523,6 +451,49 @@ function DonutSlider({ gastos, delMes, mesActual, mesOffset, rangoMes, onPrev, o
           <span key={i} className={`w-1.5 h-1.5 rounded-full transition-colors ${slide === i ? 'bg-accent' : 'bg-zinc-700'}`} />
         ))}
       </div>
+    </div>
+  )
+}
+
+/** Los cuatro indicadores de escritorio, apilados de dos en dos. */
+function ResumenMesMovil({ gastos, presupuesto }: { gastos: Gasto[]; presupuesto: number }) {
+  const hoy = new Date()
+  const clave = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  const suma = (xs: Gasto[]) => xs.reduce((t, g) => t + g.monto, 0)
+
+  const delMes = gastos.filter(g => g.fecha.startsWith(clave(hoy)))
+  const total  = suma(delMes)
+  const previo = suma(gastos.filter(g =>
+    g.fecha.startsWith(clave(new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1)))))
+
+  const dia = hoy.getDate()
+  const diasMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate()
+  const proyeccion = dia >= 3 ? Math.round(total / dia * diasMes) : null
+  const comprometido = suma(delMes.filter(g => g.origen !== 'manual'))
+
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <StatTile
+        etiqueta="Este mes"
+        valor={formatCLP(total)}
+        delta={previo > 0 ? { pct: (total - previo) / previo * 100, respecto: 'vs. anterior' } : undefined}
+        medidor={presupuesto > 0 ? { pct: total / presupuesto, limite: formatCLP(presupuesto) } : undefined}
+      />
+      <StatTile
+        etiqueta="Cierre previsto"
+        valor={proyeccion !== null ? formatCLP(proyeccion) : '—'}
+        nota={proyeccion === null ? 'Faltan días' : `A tu ritmo de ${dia} días`}
+      />
+      <StatTile
+        etiqueta="Comprometido"
+        valor={formatCLP(comprometido)}
+        nota={total > 0 ? `${Math.round(comprometido / total * 100)}% del mes` : 'Cuotas y suscripciones'}
+      />
+      <StatTile
+        etiqueta="Movimientos"
+        valor={String(delMes.length)}
+        nota="Registros del mes"
+      />
     </div>
   )
 }
@@ -602,7 +573,8 @@ export default function MobileGastos() {
       {/* ── ANÁLISIS ── */}
       {tab === 'analisis' && (
         <div className="flex-1 px-6 py-6 pb-28 flex flex-col gap-5">
-          <p className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-widest">Dashboard</p>
+          <ResumenMesMovil gastos={gastos} presupuesto={presupuestoVal} />
+          <SectionLabel>Dashboard</SectionLabel>
 
           {/* Tendencia mensual */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl py-5">
@@ -735,12 +707,25 @@ function GastoRow({ g, onDelete }: { g: Gasto; onDelete: () => void }) {
           <button onClick={e => { e.stopPropagation(); onDelete() }} className="text-red-500/70 active:text-red-400">
             <Trash2 size={18} />
           </button>
-          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${METODO_BADGE[g.metodoPago] ?? METODO_BADGE['']}`}>
-            {g.metodoPago.toUpperCase() || 'SIN MÉTODO'}
-          </span>
+          <Insignia gasto={g} />
         </div>
       )}
     </div>
+  )
+}
+
+/** Un punto del color de la categoría y el nombre: identidad sin teñir el texto. */
+function Insignia({ gasto }: { gasto: Gasto }) {
+  const auto = gasto.origen === 'manual' ? null : TIPO_LABEL[gasto.origen]
+  const texto = auto ?? gasto.metodoPago ?? ''
+  return (
+    <span className="flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded-full bg-zinc-800 text-zinc-300">
+      <span
+        className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+        style={{ background: texto ? colorFor(texto) : '#52525b' }}
+      />
+      {texto ? texto.toUpperCase() : 'SIN MÉTODO'}
+    </span>
   )
 }
 

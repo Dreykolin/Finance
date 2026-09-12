@@ -1,146 +1,321 @@
 import { useState } from 'react'
-import { Trash2 } from 'lucide-react'
+import { Trash2, Plus, Check, X, ChevronLeft, ChevronRight, Pause, Play, Pencil } from 'lucide-react'
 import { useSuscripciones } from '../../store/useSuscripciones'
 import { formatCLP } from '../../lib/format'
 import Modal from '../../components/Modal'
+import StatTile from '../../components/StatTile'
+import { Card, Button, INPUT, LABEL } from '../../components/ui'
+import MetodoPicker from '../../components/MetodoPicker'
+import {
+  MESES, ventana, etiquetaMes, periodoActual, estadoCelda, editable, ESTILO_CELDA,
+} from '../../lib/cargos'
 import type { Suscripcion, NuevaSuscripcion } from '../../types'
 
+/**
+ * El carril en el teléfono.
+ *
+ * En escritorio cada servicio es una fila: nombre a la izquierda y siete meses a
+ * la derecha. A 390px eso deja celdas de menos de veinte píxeles, imposibles de
+ * acertar con el pulgar. Aquí el bloque se apila —identidad arriba, carril
+ * debajo ocupando todo el ancho— y así las celdas rondan los cuarenta píxeles.
+ * La cabecera de meses se escribe una sola vez arriba, y sigue alineada porque
+ * todos los carriles comparten la misma retícula de siete columnas.
+ */
+function FilaServicio({ s, periodos, onAlternar, onEditar, onBaja, onEliminar }: {
+  s: Suscripcion
+  periodos: string[]
+  onAlternar: (periodo: string) => void
+  onEditar: () => void
+  onBaja: () => void
+  onEliminar: () => void
+}) {
+  const [abierto, setAbierto] = useState(false)
+  const hoy = periodoActual()
+
+  return (
+    <div className={`px-4 py-3.5 border-b border-zinc-800/40 last:border-0 ${s.activa ? '' : 'opacity-45'}`}>
+      <button className="w-full flex items-start justify-between gap-3 text-left"
+        onClick={() => setAbierto(v => !v)}>
+        <div className="min-w-0">
+          <p className="text-white font-semibold text-sm truncate">{s.nombre}</p>
+          <p className="text-zinc-500 text-xs truncate">
+            {s.ciclo === 'anual'
+              ? `${s.diaCobro} ${MESES[(s.mesCobro ?? 1) - 1]} · anual`
+              : `día ${s.diaCobro}`}
+            {s.metodoPago && ` · ${s.metodoPago}`}
+            {!s.activa && ' · de baja'}
+          </p>
+        </div>
+        <span className="text-white font-bold text-sm whitespace-nowrap tabular-nums">
+          {formatCLP(s.monto)}
+        </span>
+      </button>
+
+      <div className="grid grid-cols-7 gap-1.5 mt-3">
+        {periodos.map(p => {
+          const cargo = s.cargos.find(c => c.periodo === p)
+          const estado = estadoCelda(s, p, cargo)
+          const activa = editable(estado)
+          return (
+            <button
+              key={p}
+              disabled={!activa}
+              onClick={() => onAlternar(p)}
+              className={`aspect-square rounded-lg flex items-center justify-center transition-all ${
+                ESTILO_CELDA[estado]
+              } ${activa ? 'active:scale-95' : ''} ${p === hoy ? 'ring-1 ring-zinc-600' : ''}`}
+            >
+              {(estado === 'cobrado' || estado === 'porConfirmar') && <Check size={15} strokeWidth={3} />}
+              {estado === 'omitido' && <X size={13} strokeWidth={3} />}
+              {estado === 'proyectado' && <span className="w-1 h-1 rounded-full bg-zinc-600" />}
+            </button>
+          )
+        })}
+      </div>
+
+      {abierto && (
+        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-zinc-800 animate-fade-in">
+          <Button tamano="sm" variante="secundario" onClick={onEditar}
+            className="flex items-center gap-1.5">
+            <Pencil size={13} /> Editar
+          </Button>
+          <Button tamano="sm" variante="secundario" onClick={onBaja}
+            className="flex items-center gap-1.5">
+            {s.activa ? <><Pause size={13} /> Dar de baja</> : <><Play size={13} /> Reactivar</>}
+          </Button>
+          <button onClick={onEliminar}
+            className="ml-auto text-zinc-600 active:text-red-400 p-1.5">
+            <Trash2 size={16} />
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function MobileSuscripciones() {
-  const { suscripciones, agregar, eliminar, togglePagado } = useSuscripciones()
+  const { suscripciones, agregar, editar, eliminar, alternarCargo } = useSuscripciones()
+
+  const [offset, setOffset]       = useState(0)
   const [showForm, setShowForm]   = useState(false)
+  const [editId, setEditId]       = useState<number | null>(null)
   const [confirmId, setConfirmId] = useState<number | null>(null)
 
-  const totalMensual = suscripciones.reduce((s, sub) => s + sub.monto, 0)
-  const totalPagado  = suscripciones.filter(s => s.pagado).reduce((s, sub) => s + sub.monto, 0)
-  const pendientes   = suscripciones.filter(s => !s.pagado)
-  const pagadas      = suscripciones.filter(s => s.pagado)
+  const periodos = ventana(offset)
+  const activas  = suscripciones.filter(s => s.activa)
+  const mensual  = activas.filter(s => s.ciclo === 'mensual').reduce((t, s) => t + s.monto, 0)
+  const anual    = activas.filter(s => s.ciclo === 'anual').reduce((t, s) => t + s.monto, 0)
+  const acumulado = suscripciones.flatMap(s =>
+    s.cargos.filter(c => c.estado === 'cobrado')).reduce((t, c) => t + c.monto, 0)
+  const porRevisar = suscripciones.flatMap(s =>
+    s.cargos.filter(c => c.estado === 'cobrado' && !c.confirmado)).length
+
+  const enEdicion = suscripciones.find(s => s.id === editId) ?? null
 
   return (
     <div className="min-h-full bg-zinc-950 flex flex-col">
-      {/* Header */}
-      <div className="px-4 pt-6 pb-4">
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-xl font-extrabold tracking-tight">Suscripciones</h1>
+      <div className="px-4 pt-6 pb-4 flex items-center justify-between">
+        <h1 className="text-xl font-extrabold tracking-tight">Suscripciones</h1>
+        <Button tamano="sm" onClick={() => setShowForm(true)}
+          className="flex items-center gap-1.5">
+          <Plus size={14} /> Añadir
+        </Button>
+      </div>
+
+      <div className="px-4 pb-28 flex flex-col gap-4">
+        <div className="grid grid-cols-2 gap-3">
+          <StatTile etiqueta="Al mes" valor={formatCLP(mensual)}
+            nota={anual > 0 ? `+ ${formatCLP(Math.round(anual / 12))} prorrateado` : undefined} />
+          <StatTile etiqueta="Al año" valor={formatCLP(mensual * 12 + anual)} />
+          <StatTile etiqueta="Pagado hasta hoy" valor={formatCLP(acumulado)} />
+          <StatTile etiqueta="Por revisar" valor={String(porRevisar)}
+            nota={porRevisar > 0 ? 'Dados por hechos' : 'Todo confirmado'} />
         </div>
 
-        {/* Summary card */}
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-zinc-500 text-xs font-bold uppercase tracking-wider">Total mensual</p>
-              <p className="text-3xl font-extrabold text-white mt-1">{formatCLP(totalMensual)}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-zinc-500 text-xs">Pagado</p>
-              <p className="text-accent font-bold">{formatCLP(totalPagado)}</p>
-              <p className="text-zinc-600 text-xs mt-1">{pendientes.length} pendientes</p>
+        <Card tipo="lista">
+          <div className="flex items-center justify-between px-4 py-3.5 border-b border-zinc-800">
+            <p className="text-white font-bold text-sm">Servicios</p>
+            <div className="flex items-center gap-1">
+              <button onClick={() => setOffset(o => o - 1)}
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-zinc-500 active:bg-zinc-800">
+                <ChevronLeft size={16} />
+              </button>
+              {offset !== 0 && (
+                <button onClick={() => setOffset(0)}
+                  className="text-zinc-500 text-[11px] font-bold px-1">Hoy</button>
+              )}
+              <button onClick={() => setOffset(o => o + 1)}
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-zinc-500 active:bg-zinc-800">
+                <ChevronRight size={16} />
+              </button>
             </div>
           </div>
-          {totalMensual > 0 && (
-            <div className="mt-3">
-              <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                <div className="h-full bg-accent rounded-full transition-all" style={{ width: `${(totalPagado / totalMensual) * 100}%` }} />
-              </div>
-            </div>
+
+          {/* Una sola cabecera de meses: todos los carriles comparten retícula. */}
+          <div className="grid grid-cols-7 gap-1.5 px-4 py-2 border-b border-zinc-800/60">
+            {periodos.map(p => (
+              <span key={p} className={`text-center text-[10px] font-extrabold uppercase ${
+                p === periodoActual() ? 'text-accent' : 'text-zinc-600'
+              }`}>
+                {etiquetaMes(p)}
+              </span>
+            ))}
+          </div>
+
+          {suscripciones.length === 0 && (
+            <p className="py-10 text-center text-zinc-700 text-sm">Sin servicios registrados.</p>
           )}
+
+          {suscripciones.map(s => (
+            <FilaServicio
+              key={s.id}
+              s={s}
+              periodos={periodos}
+              onAlternar={p => alternarCargo(s.id, p)}
+              onEditar={() => setEditId(s.id)}
+              onBaja={() => editar(s.id, { activa: !s.activa })}
+              onEliminar={() => setConfirmId(s.id)}
+            />
+          ))}
+        </Card>
+
+        <div className="flex flex-wrap gap-x-4 gap-y-2 text-[11px] text-zinc-500 px-1">
+          <span className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded bg-accent" /> cobrado
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded bg-accent/20 border border-dashed border-accent/60" /> sin confirmar
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded bg-zinc-800" /> no se cobró
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded bg-zinc-900 border border-zinc-800" /> proyectado
+          </span>
         </div>
+
+        <p className="text-zinc-600 text-xs leading-relaxed px-1">
+          Los cobros se dan por hechos al llegar su fecha y se registran solos en Gastos.
+          Toca un mes si alguno no ocurrió.
+        </p>
       </div>
 
-      {/* Lists */}
-      <div className="flex-1 px-4 pb-28 flex flex-col gap-5">
-        {suscripciones.length === 0 && (
-          <div className="py-20 text-center text-zinc-600 text-sm">Sin suscripciones registradas</div>
-        )}
-
-        {pendientes.length > 0 && (
-          <div>
-            <p className="text-zinc-500 text-[11px] font-extrabold uppercase tracking-widest mb-2">Pendientes</p>
-            <div className="flex flex-col gap-2">
-              {pendientes.map(s => (
-                <SusCard key={s.id} s={s} onToggle={togglePagado} onDelete={() => setConfirmId(s.id)} />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {pagadas.length > 0 && (
-          <div>
-            <p className="text-zinc-500 text-[11px] font-extrabold uppercase tracking-widest mb-2">Pagadas</p>
-            <div className="flex flex-col gap-2">
-              {pagadas.map(s => (
-                <SusCard key={s.id} s={s} onToggle={togglePagado} onDelete={() => setConfirmId(s.id)} />
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* FAB */}
-      <button
-        onClick={() => setShowForm(true)}
-        className="fixed bottom-24 right-5 w-14 h-14 bg-accent rounded-full flex items-center justify-center shadow-lg shadow-accent/30 active:scale-95 transition-transform text-white text-2xl z-30"
-      >
-        +
-      </button>
-
-      {/* Add */}
-      <Modal open={showForm} onClose={() => setShowForm(false)} title="Nueva Suscripción">
-        <FormSuscripcion onSave={s => { agregar(s); setShowForm(false) }} />
+      <Modal open={showForm} onClose={() => setShowForm(false)} title="Nuevo servicio">
+        <FormSuscripcion onSave={async s => { await agregar(s); setShowForm(false) }} />
       </Modal>
 
-      {/* Confirm delete */}
+      <Modal open={enEdicion !== null} onClose={() => setEditId(null)} title={enEdicion?.nombre}>
+        {enEdicion && (
+          <FormSuscripcion
+            inicial={enEdicion}
+            onSave={async s => { await editar(enEdicion.id, s); setEditId(null) }}
+          />
+        )}
+      </Modal>
+
       <Modal open={confirmId !== null} onClose={() => setConfirmId(null)}>
         <div className="flex flex-col gap-4">
           <h2 className="font-bold text-base">¿Eliminar suscripción?</h2>
+          <p className="text-zinc-400 text-sm">
+            Se borrará con todo su historial. Si solo dejaste de usarla, conviene
+            darla de baja: conserva el historial y deja de proyectar cobros.
+          </p>
           <div className="flex gap-3">
-            <button onClick={() => setConfirmId(null)} className="flex-1 py-3.5 rounded-2xl bg-zinc-800 text-zinc-300 font-bold">Cancelar</button>
-            <button onClick={() => { if (confirmId) { eliminar(confirmId); setConfirmId(null) } }} className="flex-1 py-3.5 rounded-2xl bg-red-500/20 text-red-400 font-bold">Eliminar</button>
+            <Button variante="secundario" className="flex-1" onClick={() => setConfirmId(null)}>
+              Cancelar
+            </Button>
+            <Button variante="peligro" className="flex-1"
+              onClick={() => { if (confirmId) { eliminar(confirmId); setConfirmId(null) } }}>
+              Eliminar
+            </Button>
           </div>
         </div>
       </Modal>
-
     </div>
   )
 }
 
-function SusCard({ s, onToggle, onDelete }: { s: Suscripcion; onToggle: (id: number) => void; onDelete: () => void }) {
-  return (
-    <div className={`bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-4 flex items-center gap-4 ${s.pagado ? 'opacity-50' : ''}`}>
-      <button
-        onClick={() => onToggle(s.id)}
-        className={`w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${s.pagado ? 'bg-accent border-accent' : 'border-zinc-600 active:border-accent'}`}
-      >
-        {s.pagado && (
-          <svg width="12" height="10" viewBox="0 0 10 8" fill="none">
-            <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        )}
-      </button>
-      <p className={`flex-1 font-semibold text-base ${s.pagado ? 'line-through text-zinc-500' : 'text-white'}`}>{s.nombre}</p>
-      <p className="text-white font-bold">{formatCLP(s.monto)}</p>
-      <button onClick={onDelete} className="text-zinc-700 active:text-red-500 pl-1">
-        <Trash2 size={16} />
-      </button>
-    </div>
-  )
-}
+function FormSuscripcion({ inicial, onSave }: {
+  inicial?: Suscripcion
+  onSave: (s: NuevaSuscripcion) => Promise<void>
+}) {
+  const [nombre, setNombre] = useState(inicial?.nombre ?? '')
+  const [monto, setMonto]   = useState(inicial ? String(inicial.monto) : '')
+  const [ciclo, setCiclo]   = useState<'mensual' | 'anual'>(inicial?.ciclo ?? 'mensual')
+  const [dia, setDia]       = useState(String(inicial?.diaCobro ?? 1))
+  const [mes, setMes]       = useState(String(inicial?.mesCobro ?? new Date().getMonth() + 1))
+  const [metodo, setMetodo] = useState(inicial?.metodoPago ?? '')
+  const [guardando, setGuardando] = useState(false)
 
-function FormSuscripcion({ onSave }: { onSave: (s: NuevaSuscripcion) => void }) {
-  const [nombre, setNombre] = useState('')
-  const [monto, setMonto]   = useState('')
-  const inputCls = "w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3.5 text-white outline-none focus:border-accent transition-colors placeholder:text-zinc-600"
-
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault()
-    if (!nombre || !monto) return
-    onSave({ nombre, monto: parseInt(monto), ciclo: 'mensual', diaCobro: 1 })
+    const d = parseInt(dia)
+    if (!nombre || !monto || !d) return
+    setGuardando(true)
+    try {
+      await onSave({
+        nombre,
+        monto: parseInt(monto),
+        ciclo,
+        diaCobro: Math.min(Math.max(d, 1), 31),
+        mesCobro: ciclo === 'anual' ? parseInt(mes) : null,
+        metodoPago: metodo,
+      })
+    } finally {
+      setGuardando(false)
+    }
   }
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-4">
-      <input className={inputCls} placeholder="Netflix, Spotify..." value={nombre} onChange={e => setNombre(e.target.value)} required />
-      <input className={inputCls} type="number" placeholder="Monto mensual" value={monto} onChange={e => setMonto(e.target.value.replace(/\D/g,''))} required />
-      <button type="submit" disabled={!nombre || !monto} className="bg-accent text-white font-bold rounded-2xl py-4 disabled:opacity-40 active:opacity-80">Guardar</button>
+      <div>
+        <label className={LABEL}>Servicio</label>
+        <input className={INPUT} placeholder="Netflix, gimnasio…" value={nombre}
+          onChange={e => setNombre(e.target.value)} required />
+      </div>
+
+      <div>
+        <label className={LABEL}>Monto del cobro</label>
+        <input className={INPUT} type="number" min="0" placeholder="0" value={monto}
+          onChange={e => setMonto(e.target.value.replace(/\D/g, ''))} required />
+      </div>
+
+      <div>
+        <label className={LABEL}>Cada cuánto</label>
+        <div className="flex bg-zinc-950 border border-zinc-800 rounded-xl p-1">
+          {(['mensual', 'anual'] as const).map(c => (
+            <button key={c} type="button" onClick={() => setCiclo(c)}
+              className={`flex-1 py-2.5 rounded-lg text-sm font-bold capitalize transition-colors ${
+                ciclo === c ? 'bg-accent text-white' : 'text-zinc-500'
+              }`}>
+              {c}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <label className={LABEL}>Cuándo te cobran</label>
+        <div className={`grid gap-3 ${ciclo === 'anual' ? 'grid-cols-2' : 'grid-cols-1'}`}>
+          {ciclo === 'anual' && (
+            <select className={INPUT} value={mes} onChange={e => setMes(e.target.value)}>
+              {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+            </select>
+          )}
+          <input className={INPUT} type="number" min="1" max="31" placeholder="Día" value={dia}
+            onChange={e => setDia(e.target.value.replace(/\D/g, ''))} required />
+        </div>
+      </div>
+
+      <div>
+        <label className={LABEL}>A dónde te lo cobran</label>
+        <MetodoPicker valor={metodo} onChange={setMetodo} opcional />
+      </div>
+
+      <Button type="submit" disabled={guardando || !nombre || !monto}>
+        {guardando ? 'Guardando…' : inicial ? 'Guardar cambios' : 'Añadir servicio'}
+      </Button>
     </form>
   )
 }
+

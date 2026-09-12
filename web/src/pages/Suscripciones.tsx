@@ -9,73 +9,30 @@ import MetodoPicker from '../components/MetodoPicker'
 import StatTile from '../components/StatTile'
 import { PageHeader, Card, CardHeader, Button, INPUT, LABEL } from '../components/ui'
 import { formatCLP } from '../lib/format'
-import type { Suscripcion, NuevaSuscripcion, CargoSuscripcion } from '../types'
+import {
+  MESES, ventana, etiquetaMes, periodoActual, estadoCelda, editable,
+  ESTILO_CELDA, type EstadoCelda,
+} from '../lib/cargos'
+import type { Suscripcion, NuevaSuscripcion } from '../types'
 
-const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
-
-const pad = (n: number) => String(n).padStart(2, '0')
-const periodoDe = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`
-const periodoActual = periodoDe(new Date())
-
-/** Ventana del carril: tres meses atrás, el actual y tres adelante. */
-function ventana(offset: number): string[] {
-  const hoy = new Date()
-  const out: string[] = []
-  for (let i = -3; i <= 3; i++) {
-    out.push(periodoDe(new Date(hoy.getFullYear(), hoy.getMonth() + i + offset, 1)))
-  }
-  return out
-}
-
-const etiquetaMes = (periodo: string) => MESES[Number(periodo.slice(5, 7)) - 1]
-
-/**
- * Qué corresponde mostrar en una celda del carril.
- *
- * La app no puede saber si un cobro ocurrió — no hay conexión bancaria. Lo que
- * sí sabe es qué cobros ya vencieron, y los da por hechos hasta que el usuario
- * diga lo contrario. De ahí la distinción entre 'cobrado' y 'porConfirmar'.
- */
-type EstadoCelda = 'cobrado' | 'porConfirmar' | 'omitido' | 'proyectado' | 'noAplica'
-
-function estadoCelda(s: Suscripcion, periodo: string, cargo?: CargoSuscripcion): EstadoCelda {
-  if (cargo) {
-    if (cargo.estado === 'omitido') return 'omitido'
-    return cargo.confirmado ? 'cobrado' : 'porConfirmar'
-  }
-  // Sin cargo: o el servicio aún no existía, o el cobro no ha llegado.
-  if (periodo < s.desde.slice(0, 7)) return 'noAplica'
-  if (s.ciclo === 'anual' && s.mesCobro && Number(periodo.slice(5, 7)) !== s.mesCobro) return 'noAplica'
-  if (!s.activa) return 'noAplica'
-  return periodo >= periodoActual ? 'proyectado' : 'noAplica'
-}
-
+/** Celda del carril en escritorio, donde hay sitio para el ratón y el título. */
 function Celda({ estado, onClick, title }: {
   estado: EstadoCelda
   onClick?: () => void
   title: string
 }) {
-  const base = 'w-full aspect-square max-w-[42px] mx-auto rounded-lg flex items-center justify-center transition-all'
-  const interactivo = estado !== 'proyectado' && estado !== 'noAplica'
-
-  const estilos: Record<EstadoCelda, string> = {
-    cobrado:      'bg-accent text-white',
-    porConfirmar: 'bg-accent/20 text-accent border-2 border-dashed border-accent/60',
-    omitido:      'bg-zinc-800 text-zinc-600',
-    proyectado:   'bg-zinc-900 border border-zinc-800 text-zinc-700',
-    noAplica:     'bg-transparent border border-zinc-900 text-zinc-800',
-  }
-
+  const activa = editable(estado)
   return (
     <button
       type="button"
       title={title}
-      disabled={!interactivo}
+      disabled={!activa}
       onClick={onClick}
-      className={`${base} ${estilos[estado]} ${interactivo ? 'hover:scale-105 cursor-pointer' : 'cursor-default'}`}
+      className={`w-full aspect-square max-w-[42px] mx-auto rounded-lg flex items-center justify-center transition-all ${
+        ESTILO_CELDA[estado]
+      } ${activa ? 'hover:scale-105 cursor-pointer' : 'cursor-default'}`}
     >
-      {estado === 'cobrado' && <Check size={16} strokeWidth={3} />}
-      {estado === 'porConfirmar' && <Check size={16} strokeWidth={3} />}
+      {(estado === 'cobrado' || estado === 'porConfirmar') && <Check size={16} strokeWidth={3} />}
       {estado === 'omitido' && <X size={14} strokeWidth={3} />}
       {estado === 'proyectado' && <span className="w-1 h-1 rounded-full bg-zinc-600" />}
     </button>
@@ -211,7 +168,7 @@ export default function Suscripciones() {
               <span
                 key={p}
                 className={`text-center text-[10px] font-extrabold uppercase tracking-wider ${
-                  p === periodoActual ? 'text-accent' : 'text-zinc-600'
+                  p === periodoActual() ? 'text-accent' : 'text-zinc-600'
                 }`}
               >
                 {etiquetaMes(p)}

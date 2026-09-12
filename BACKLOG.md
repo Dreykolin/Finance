@@ -108,8 +108,19 @@ _(ideas sin clasificar — van llegando acá)_
 - [ ] **T14 . Navegacion por mes en el historial de escritorio.**
   Mobile permite moverse entre meses y muestra el avance del presupuesto; el escritorio sigue con una lista plana de 12 + "ver todos", sin forma de mirar el mes pasado. Es el hueco funcional mas grande que queda en desktop.
 
-- [ ] **T8 · Paridad mobile de lo aplicado en desktop.**
-  Quedó pendiente a propósito (se priorizó desktop). Falta en mobile: edición de cuotas + deshacer (F3), donut por `origen` y toggle monto/frecuencia (B5), gráfico de Ahorros con líneas de meta — hoy **mobile no tiene gráfico alguno en Ahorros** (F4).
+- [x] **T8 · Paridad móvil.**
+  Las cuatro pantallas de `/mobile/*` estaban seis iteraciones atrás, y **Gastos tenía su
+  propia copia de la paleta con los colores que habían fallado la validación** — crédito y
+  débito indistinguibles. Ahora: donut y paleta compartidos con clasificación por origen,
+  carril de suscripciones apilado (celdas de ~40px en vez de <20px), edición y deshacer en
+  cuotas, método de pago en ambas altas, indicadores en las cuatro, y **gráfico de evolución
+  en Ahorros**, que no tenía ninguno. La lógica del carril vive en `lib/cargos.ts` y la
+  consumen las dos plataformas.
+  *Hecho 2026-09-12.*
+
+- [ ] **T17 · El zoom del gráfico de tendencia sigue siendo solo móvil.**
+  Es el único elemento que el escritorio no tiene y el teléfono sí (ver T10). Lo dejé
+  así: depende de gestos táctiles y su equivalente con ratón es otro desarrollo.
 
 - [ ] **T9 · Donut duplicado.**
   `components/Donut.tsx` (nuevo, compartido) convive con el donut original embebido en `pages/mobile/Gastos.tsx`. Al hacer T8, migrar mobile al compartido y borrar el local.
