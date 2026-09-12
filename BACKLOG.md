@@ -51,8 +51,9 @@ _(ideas sin clasificar — van llegando acá)_
 - [ ] **T2 · Duplicación desktop/mobile.**
   Hay dos árboles de páginas completos (`pages/*` y `pages/mobile/*`) con lógica repetida. Decidir: ¿converger en responsive, o asumir la separación como deliberada y compartir solo la capa de datos?
 
-- [ ] **T3 · `fecha_limite` de suscripciones es un campo muerto.**
-  El backend lo guarda y lo acepta, pero `web/src/types.ts` no lo expone y ningún form lo llena. O se usa (ver F2) o se borra del esquema.
+- [ ] **T3 · `fecha_limite` de suscripciones quedó obsoleta.**
+  La reemplazaron `ciclo` + `dia_cobro` + `mes_cobro`. Solo se usa una vez, para derivar
+  el día de cobro inicial al migrar los registros antiguos. Se puede borrar tras el primer despliegue.
 
 - [ ] **T4 · Sin índices por `id_usuario`.**
   Todas las consultas filtran por `id_usuario` y no hay índice. Trivial de agregar en `initDb()`.
@@ -94,8 +95,10 @@ _(ideas sin clasificar — van llegando acá)_
 - [ ] **F1 · Presupuesto mensual vive en `localStorage`.**
   `fin_presupuesto` no se sincroniza entre dispositivos ni sobrevive un borrado de datos. Moverlo al backend (tabla `configuracion` o columna en `usuarios`).
 
-- [ ] **F2 · Reset automático de suscripciones al cambiar de mes.**
-  Hoy el reset es un botón manual. Con `fecha_limite` (T3) o un campo `ultimo_mes_pagado` se podría desmarcar solo, y avisar de vencimientos próximos.
+- [x] **F2 . Suscripciones: de booleano a cargos por periodo.**
+  `pagado` no sabia a que mes correspondia y el reseteo manual borraba la historia. Ahora cada suscripcion declara ciclo (mensual/anual) y dia de cobro, y cada cobro es una fila en `cargos_suscripciones` con periodo, monto congelado y estado. Los cargos vencidos se materializan solos al listar (sin cron) y se dan por cobrados, generando el gasto; el usuario marca los que no ocurrieron. Carril de 7 meses navegable en desktop. Se elimino el boton de reseteo (backend y ambas plataformas).
+  Se agrego **dar de baja** (`activa`): sin eso, el modo optimista seguiria inventando gastos de un servicio ya cancelado.
+  *Hecho 2026-09-12.*
 
 - [x] **F3 · Editar cuotas (incluidas las ya pagadas).**
   `PATCH /cuotas/:id` con validaciones, más formulario de edición integral en el modal de detalle y un atajo *Deshacer última cuota*. Bajar `cuotas_pagadas` revierte los gastos generados (ver B6). El formulario avisa antes de confirmar.
@@ -112,8 +115,12 @@ _(ideas sin clasificar — van llegando acá)_
 - [ ] **F6 · Metas como sobres con dinero asignado.**
   Hoy las metas son líneas de referencia sobre un saldo único: tres metas de $500k con $500k ahorrados se ven todas al 100%. El esquema ya soporta lo necesario (`depositos_reservas.id_reserva`), pero la UI manda todo a `General`. Decisión de producto pendiente, no solo técnica.
 
-- [ ] **F7 · Editar gastos y suscripciones.**
-  Mismo hueco que tenían las cuotas: solo alta y baja. Corregir exige borrar y recrear.
+- [ ] **F7 · Editar gastos.**
+  Solo admiten alta y baja: corregir un gasto exige borrarlo y recrearlo.
+  Cuotas y suscripciones ya tienen edición.
+
+- [ ] **F8 . Recordatorio de cobros proximos.**
+  Ya existe el dato (dia de cobro): falta avisar antes de que ocurra. Hoy el carril solo se mira si entras.
 
 ---
 

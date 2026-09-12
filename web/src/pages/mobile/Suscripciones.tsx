@@ -1,15 +1,14 @@
 import { useState } from 'react'
-import { RotateCcw, Trash2 } from 'lucide-react'
+import { Trash2 } from 'lucide-react'
 import { useSuscripciones } from '../../store/useSuscripciones'
 import { formatCLP } from '../../lib/format'
 import Modal from '../../components/Modal'
-import type { Suscripcion } from '../../types'
+import type { Suscripcion, NuevaSuscripcion } from '../../types'
 
 export default function MobileSuscripciones() {
-  const { suscripciones, agregar, eliminar, togglePagado, resetearPagos } = useSuscripciones()
+  const { suscripciones, agregar, eliminar, togglePagado } = useSuscripciones()
   const [showForm, setShowForm]   = useState(false)
   const [confirmId, setConfirmId] = useState<number | null>(null)
-  const [showReset, setShowReset] = useState(false)
 
   const totalMensual = suscripciones.reduce((s, sub) => s + sub.monto, 0)
   const totalPagado  = suscripciones.filter(s => s.pagado).reduce((s, sub) => s + sub.monto, 0)
@@ -22,10 +21,6 @@ export default function MobileSuscripciones() {
       <div className="px-4 pt-6 pb-4">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-xl font-extrabold tracking-tight">Suscripciones</h1>
-          <button onClick={() => setShowReset(true)}
-            className="w-9 h-9 flex items-center justify-center rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 active:bg-zinc-800">
-            <RotateCcw size={16} />
-          </button>
         </div>
 
         {/* Summary card */}
@@ -104,17 +99,6 @@ export default function MobileSuscripciones() {
         </div>
       </Modal>
 
-      {/* Reset */}
-      <Modal open={showReset} onClose={() => setShowReset(false)}>
-        <div className="flex flex-col gap-4">
-          <h2 className="font-bold text-base">Resetear pagos del mes</h2>
-          <p className="text-zinc-400 text-sm">Todos los checkmarks se desmarcarán.</p>
-          <div className="flex gap-3">
-            <button onClick={() => setShowReset(false)} className="flex-1 py-3.5 rounded-2xl bg-zinc-800 text-zinc-300 font-bold">Cancelar</button>
-            <button onClick={() => { resetearPagos(); setShowReset(false) }} className="flex-1 py-3.5 rounded-2xl bg-accent/20 text-accent font-bold">Resetear</button>
-          </div>
-        </div>
-      </Modal>
     </div>
   )
 }
@@ -141,7 +125,7 @@ function SusCard({ s, onToggle, onDelete }: { s: Suscripcion; onToggle: (id: num
   )
 }
 
-function FormSuscripcion({ onSave }: { onSave: (s: Omit<Suscripcion, 'id'>) => void }) {
+function FormSuscripcion({ onSave }: { onSave: (s: NuevaSuscripcion) => void }) {
   const [nombre, setNombre] = useState('')
   const [monto, setMonto]   = useState('')
   const inputCls = "w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3.5 text-white outline-none focus:border-accent transition-colors placeholder:text-zinc-600"
@@ -149,7 +133,7 @@ function FormSuscripcion({ onSave }: { onSave: (s: Omit<Suscripcion, 'id'>) => v
   function submit(e: React.FormEvent) {
     e.preventDefault()
     if (!nombre || !monto) return
-    onSave({ nombre, monto: parseInt(monto), pagado: false })
+    onSave({ nombre, monto: parseInt(monto), ciclo: 'mensual', diaCobro: 1 })
   }
 
   return (

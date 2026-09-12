@@ -65,6 +65,46 @@ export async function initDb() {
     ALTER TABLE compras ADD COLUMN IF NOT EXISTS id_suscripcion
       INTEGER REFERENCES suscripciones(id) ON DELETE SET NULL;
 
+    -- ── Suscripciones: de un booleano sin tiempo a cargos por período ────────
+    -- 'pagado' no sabía a qué mes correspondía y el reseteo manual borraba la
+    -- historia. Ahora cada cobro es una fila con su período y su monto propio.
+    ALTER TABLE suscripciones ADD COLUMN IF NOT EXISTS ciclo TEXT NOT NULL DEFAULT 'mensual';
+    ALTER TABLE suscripciones ADD COLUMN IF NOT EXISTS dia_cobro INTEGER NOT NULL DEFAULT 1;
+    ALTER TABLE suscripciones ADD COLUMN IF NOT EXISTS mes_cobro INTEGER;
+    ALTER TABLE suscripciones ADD COLUMN IF NOT EXISTS activa BOOLEAN NOT NULL DEFAULT TRUE;
+    -- Desde cuándo corre el servicio: evita proyectar cargos hacia un pasado
+    -- en el que el usuario todavía no estaba suscrito.
+    ALTER TABLE suscripciones ADD COLUMN IF NOT EXISTS desde DATE NOT NULL DEFAULT CURRENT_DATE;
+
+    CREATE TABLE IF NOT EXISTS cargos_suscripciones (
+      id             SERIAL PRIMARY KEY,
+      id_suscripcion INTEGER NOT NULL REFERENCES suscripciones(id) ON DELETE CASCADE,
+      periodo        TEXT NOT NULL,                      -- 'YYYY-MM'
+      -- Monto congelado: subir el precio del servicio no reescribe el historial.
+      monto          INTEGER NOT NULL,
+      estado         TEXT NOT NULL DEFAULT 'cobrado',    -- 'cobrado' | 'omitido'
+      -- El cargo se asume cobrado al vencer; 'confirmado' distingue lo que el
+      -- usuario verificó de lo que la app dio por hecho.
+      confirmado     BOOLEAN NOT NULL DEFAULT FALSE,
+      fecha          DATE NOT NULL,
+      id_compra      INTEGER REFERENCES compras(id) ON DELETE SET NULL,
+      UNIQUE (id_suscripcion, periodo)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_cargos_suscripcion ON cargos_suscripciones (id_suscripcion);
+
+    -- Migración del booleano anterior: lo que estaba marcado como pagado pasa a
+    -- ser un cargo confirmado del mes en curso. Idempotente por el UNIQUE.
+    INSERT INTO cargos_suscripciones (id_suscripcion, periodo, monto, estado, confirmado, fecha)
+    SELECT id, TO_CHAR(CURRENT_DATE, 'YYYY-MM'), precio, 'cobrado', TRUE, CURRENT_DATE
+    FROM suscripciones WHERE pagado = TRUE
+    ON CONFLICT (id_suscripcion, periodo) DO NOTHING;
+
+    -- Si había una fecha límite declarada, sirve como día de cobro inicial.
+    UPDATE suscripciones
+    SET dia_cobro = EXTRACT(DAY FROM fecha_limite)::INTEGER
+    WHERE fecha_limite IS NOT NULL AND dia_cobro = 1;
+
     CREATE TABLE IF NOT EXISTS depositos_reservas (
       id          SERIAL PRIMARY KEY,
       id_reserva  INTEGER NOT NULL REFERENCES reservas(id) ON DELETE CASCADE,
