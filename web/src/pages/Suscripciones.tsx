@@ -7,6 +7,7 @@ import { useSuscripciones } from '../store/useSuscripciones'
 import Modal from '../components/Modal'
 import MetodoPicker from '../components/MetodoPicker'
 import StatTile from '../components/StatTile'
+import { PageHeader, Card, CardHeader, Button, INPUT, LABEL } from '../components/ui'
 import { formatCLP } from '../lib/format'
 import type { Suscripcion, NuevaSuscripcion, CargoSuscripcion } from '../types'
 
@@ -161,22 +162,12 @@ export default function Suscripciones() {
 
   return (
     <div className="min-h-full bg-zinc-950 pb-6">
-      <div className="flex items-start justify-between px-5 pt-6 pb-4">
-        <div className="flex items-center gap-3">
-          <Repeat2 size={22} className="text-accent" />
-          <div>
-            <h1 className="text-2xl font-extrabold tracking-tight">Suscripciones</h1>
-            <p className="text-zinc-500 text-sm mt-0.5">Seguimiento de cobros recurrentes</p>
-          </div>
-        </div>
-        <button
-          onClick={() => setShowForm(true)}
-          className="flex items-center gap-2 bg-white text-zinc-950 px-3.5 py-2 rounded-xl text-sm font-bold hover:opacity-90 transition-opacity"
-        >
+      <PageHeader Icono={Repeat2} titulo="Suscripciones" subtitulo="Tus cobros recurrentes, mes a mes">
+        <Button onClick={() => setShowForm(true)} className="flex items-center gap-2 py-2">
           <Plus size={16} />
           Añadir
-        </button>
-      </div>
+        </Button>
+      </PageHeader>
 
       <div className="px-5 flex flex-col gap-5">
         <ResumenSuscripciones
@@ -187,9 +178,8 @@ export default function Suscripciones() {
         />
 
         {/* Carril */}
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
-            <p className="text-white font-bold">Servicios</p>
+        <Card tipo="lista">
+          <CardHeader titulo="Servicios" nota="Toca un mes para corregir si el cobro ocurrió o no">
             <div className="flex items-center gap-1">
               <button
                 onClick={() => setOffset(o => o - 1)}
@@ -212,7 +202,7 @@ export default function Suscripciones() {
                 <ChevronRight size={15} />
               </button>
             </div>
-          </div>
+          </CardHeader>
 
           {/* Cabecera de meses */}
           <div className="grid grid-cols-[minmax(0,1fr)_repeat(7,minmax(34px,46px))_76px] gap-2 px-5 py-2.5 border-b border-zinc-800/60">
@@ -330,7 +320,7 @@ export default function Suscripciones() {
               </span>
             </div>
           )}
-        </div>
+        </Card>
 
         <p className="text-zinc-600 text-xs leading-relaxed">
           Los cobros se dan por hechos al llegar su fecha y se registran solos en Gastos.
@@ -359,18 +349,15 @@ export default function Suscripciones() {
             conviene darla de baja: conserva el historial y deja de proyectar cobros.
           </p>
           <div className="flex gap-3 mt-2">
-            <button
-              onClick={() => setConfirmId(null)}
-              className="flex-1 py-3 rounded-xl bg-zinc-800 text-zinc-300 font-bold text-sm hover:bg-zinc-700 transition-colors"
-            >
+            <Button variante="secundario" className="flex-1" onClick={() => setConfirmId(null)}>
               Cancelar
-            </button>
-            <button
+            </Button>
+            <Button
+              variante="peligro" className="flex-1"
               onClick={() => { if (confirmId) { eliminar(confirmId); setConfirmId(null) } }}
-              className="flex-1 py-3 rounded-xl bg-red-500/20 text-red-400 font-bold text-sm hover:bg-red-500/30 transition-colors"
             >
               Eliminar
-            </button>
+            </Button>
           </div>
         </div>
       </Modal>
@@ -390,8 +377,8 @@ function FormSuscripcion({ inicial, onSave }: {
   const [metodo, setMetodo]   = useState(inicial?.metodoPago ?? '')
   const [guardando, setGuardando] = useState(false)
 
-  const inputCls = "bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-accent transition-colors placeholder:text-zinc-600 w-full"
-  const labelCls = "text-zinc-500 text-[10px] font-extrabold tracking-widest uppercase mb-1.5 block"
+  const inputCls = INPUT
+  const labelCls = LABEL
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -491,13 +478,9 @@ function FormSuscripcion({ inicial, onSave }: {
         <MetodoPicker valor={metodo} onChange={setMetodo} opcional />
       </div>
 
-      <button
-        type="submit"
-        disabled={guardando || !nombre || !monto}
-        className="bg-accent text-white font-bold rounded-xl py-3 text-sm hover:opacity-90 transition-opacity disabled:opacity-40"
-      >
+      <Button type="submit" disabled={guardando || !nombre || !monto}>
         {guardando ? 'Guardando…' : inicial ? 'Guardar cambios' : 'Añadir servicio'}
-      </button>
+      </Button>
     </form>
   )
 }

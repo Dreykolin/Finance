@@ -1,3 +1,5 @@
+import { Card, SectionLabel } from './ui'
+
 interface Props {
   title: string
   children: React.ReactNode
@@ -13,14 +15,12 @@ interface Props {
 
 export default function ChartContainer({ title, children, height = 280, action }: Props) {
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl py-5">
+    <Card tipo="grafico">
       <div className="flex items-center justify-between gap-3 px-5 mb-4">
-        <p className="text-zinc-500 text-[10px] font-extrabold tracking-widest uppercase">
-          {title}
-        </p>
+        <SectionLabel>{title}</SectionLabel>
         {action}
       </div>
       <div className="px-2" style={{ height }}>{children}</div>
-    </div>
+    </Card>
   )
 }

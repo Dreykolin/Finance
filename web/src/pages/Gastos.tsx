@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Settings, Trash2, ChevronDown } from 'lucide-react'
+import { Settings, Trash2, ChevronDown, TrendingUp } from 'lucide-react'
 import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement,
   LineElement, Title, Tooltip, Legend, Filler,
@@ -11,6 +11,7 @@ import Donut, { type DonutSlice } from '../components/Donut'
 import Modal from '../components/Modal'
 import { formatCLP, formatFecha, mesLabel } from '../lib/format'
 import StatTile from '../components/StatTile'
+import { PageHeader, Card, CardHeader, SectionLabel, Button, IconButton, INPUT } from '../components/ui'
 import { METODOS, TIPO_LABEL, TIPOS, SIN_METODO, colorFor, ordenCanonico } from '../lib/colors'
 import type { Gasto, NuevoGasto } from '../types'
 
@@ -45,19 +46,13 @@ export default function Gastos() {
 
   return (
     <div className="min-h-full bg-zinc-950">
-      {/* Header */}
-      <div className="flex items-start justify-between px-5 pt-6 pb-4">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight">Finanzas</h1>
-          <p className="text-zinc-500 text-sm mt-0.5">Gestión de gastos</p>
-        </div>
-        <button
+      <PageHeader Icono={TrendingUp} titulo="Gastos" subtitulo="Tus movimientos y en qué se va el mes">
+        <IconButton
+          Icono={Settings}
+          title="Presupuesto mensual"
           onClick={() => { setPresupuestoInput(presupuesto > 0 ? String(presupuesto) : ''); setShowSettings(true) }}
-          className="bg-zinc-900 border border-zinc-800 p-2 rounded-xl text-accent hover:bg-zinc-800 transition-colors"
-        >
-          <Settings size={18} />
-        </button>
-      </div>
+        />
+      </PageHeader>
 
       {/*
         * Mismo reparto que Ahorros: a la izquierda lo que se lee (análisis, fijo
@@ -94,12 +89,7 @@ export default function Gastos() {
               />
             </div>
           </div>
-          <button
-            onClick={savePresupuesto}
-            className="bg-accent text-white font-bold rounded-xl py-3 hover:opacity-90 transition-opacity"
-          >
-            Guardar
-          </button>
+          <Button onClick={savePresupuesto}>Guardar</Button>
         </div>
       </Modal>
     </div>
@@ -326,11 +316,9 @@ function DistribucionCard({ gastos }: { gastos: Gasto[] }) {
   )
 
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl py-5">
+    <Card tipo="grafico">
       <div className="flex items-center justify-between px-5 mb-2 gap-3 flex-wrap">
-        <p className="text-zinc-500 text-[10px] font-extrabold tracking-widest uppercase">
-          Distribución del Gasto
-        </p>
+        <SectionLabel>Distribución del Gasto</SectionLabel>
         <div className="flex items-center gap-2">
           <Toggle valor={eje} opciones={['metodo', 'tipo'] as const} onChange={setEje} />
           <Toggle valor={modo} opciones={['monto', 'frecuencia'] as const} onChange={setModo} />
@@ -352,7 +340,7 @@ function DistribucionCard({ gastos }: { gastos: Gasto[] }) {
           </p>
         )}
       </div>
-    </div>
+    </Card>
   )
 }
 
@@ -370,18 +358,16 @@ function HistorialTab({
   const visibles = verTodos ? gastos : gastos.slice(0, 12)
 
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-4 border-b border-zinc-800">
-        <p className="text-white font-bold">Movimientos</p>
-        <button
+    <Card tipo="lista">
+      <CardHeader titulo="Movimientos">
+        <Button
+          tamano="sm"
+          variante={showForm ? 'secundario' : 'primario'}
           onClick={() => setShowForm(v => !v)}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-            showForm ? 'bg-zinc-800 text-zinc-400' : 'bg-white text-zinc-950'
-          }`}
         >
           {showForm ? 'Cerrar' : '+ Añadir'}
-        </button>
-      </div>
+        </Button>
+      </CardHeader>
 
       {showForm && (
         <div className="p-4 border-b border-zinc-800">
@@ -419,22 +405,20 @@ function HistorialTab({
           <h2 className="font-bold text-base">¿Eliminar gasto?</h2>
           <p className="text-zinc-400 text-sm leading-relaxed">{avisoBorrado(gastos, confirmId)}</p>
           <div className="flex gap-3 mt-2">
-            <button
-              onClick={() => setConfirmId(null)}
-              className="flex-1 py-3 rounded-xl bg-zinc-800 text-zinc-300 font-bold text-sm hover:bg-zinc-700 transition-colors"
-            >
+            <Button variante="secundario" className="flex-1" onClick={() => setConfirmId(null)}>
               Cancelar
-            </button>
-            <button
+            </Button>
+            <Button
+              variante="peligro"
+              className="flex-1"
               onClick={() => { if (confirmId) { onEliminar(confirmId); setConfirmId(null) } }}
-              className="flex-1 py-3 rounded-xl bg-red-500/20 text-red-400 font-bold text-sm hover:bg-red-500/30 transition-colors"
             >
               Eliminar
-            </button>
+            </Button>
           </div>
         </div>
       </Modal>
-    </div>
+    </Card>
   )
 }
 
@@ -505,7 +489,7 @@ function FormNuevoGasto({
       <input
         type="text"
         placeholder="¿En qué gastaste?"
-        className="bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-accent transition-colors placeholder:text-zinc-600"
+        className={INPUT}
         value={descripcion}
         onChange={e => setDescripcion(e.target.value)}
         required
@@ -514,7 +498,7 @@ function FormNuevoGasto({
         <input
           type="number"
           placeholder="Monto"
-          className="bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-accent transition-colors placeholder:text-zinc-600"
+          className={INPUT}
           value={monto}
           onChange={e => setMonto(e.target.value.replace(/\D/g, ''))}
           min="0"
@@ -530,7 +514,7 @@ function FormNuevoGasto({
       </div>
 
       <div>
-        <p className="text-zinc-500 text-[10px] font-extrabold tracking-widest uppercase mb-2">Método de pago</p>
+        <SectionLabel className="mb-2">Método de pago</SectionLabel>
         <div className="flex flex-wrap gap-2">
           {METODOS.map(m => (
             <button
@@ -549,13 +533,9 @@ function FormNuevoGasto({
         </div>
       </div>
 
-      <button
-        type="submit"
-        className="bg-accent text-white font-bold rounded-xl py-3 text-sm hover:opacity-90 transition-opacity disabled:opacity-40"
-        disabled={!descripcion || !monto || !metodo}
-      >
+      <Button type="submit" disabled={!descripcion || !monto || !metodo}>
         Guardar Registro
-      </button>
+      </Button>
     </form>
   )
 }

@@ -4,6 +4,7 @@ import { useCuotas } from '../store/useCuotas'
 import Modal from '../components/Modal'
 import MetodoPicker from '../components/MetodoPicker'
 import StatTile from '../components/StatTile'
+import { PageHeader, Card, SectionLabel, Button, INPUT, LABEL } from '../components/ui'
 import ColumnasMensuales, { type PuntoMes } from '../components/ColumnasMensuales'
 import { formatCLP, formatFecha } from '../lib/format'
 import type { CompraCuotas } from '../types'
@@ -166,37 +167,24 @@ export default function Cuotas() {
 
   return (
     <div className="min-h-full bg-zinc-950 pb-4">
-      {/* Header */}
-      <div className="flex items-start justify-between px-5 pt-6 pb-4">
-        <div className="flex items-center gap-3">
-          <CreditCard size={22} className="text-accent" />
-          <div>
-            <h1 className="text-2xl font-extrabold tracking-tight">Seguimiento</h1>
-            <div className="mt-1">
-              <p className="text-zinc-500 text-xs font-bold uppercase tracking-wider">Carga Mensual</p>
-              <p className="text-white text-lg font-bold">{formatCLP(cargaMensual)}</p>
-            </div>
-          </div>
-        </div>
+      <PageHeader Icono={CreditCard} titulo="Cuotas" subtitulo="Tus compras a plazo y cuándo terminan">
         <button
-          onClick={() => { setShowGlobal(true) }}
+          onClick={() => setShowGlobal(true)}
           className="hover:opacity-80 transition-opacity"
           title="Resumen global"
         >
-          <RingProgress value={totalPagadas} total={totalCuotas} size={60} stroke={6} />
+          <RingProgress value={totalPagadas} total={totalCuotas} size={54} stroke={6} />
         </button>
-      </div>
+      </PageHeader>
 
       <div className="h-px bg-zinc-800 mx-5 mb-5" />
 
       {cuotas.length > 0 && (
         <div className="px-5 mb-5 flex flex-col gap-5">
           <ResumenCuotas cuotas={cuotas} />
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl py-5">
+          <Card tipo="grafico">
             <div className="px-5 mb-1">
-              <p className="text-zinc-500 text-[10px] font-extrabold tracking-widest uppercase">
-                Carga mensual proyectada
-              </p>
+              <SectionLabel>Carga mensual proyectada</SectionLabel>
               <p className="text-zinc-600 text-xs mt-1">
                 Lo que pagarás cada mes si no tomas nuevas cuotas. Cada escalón hacia
                 abajo es un producto que terminas.
@@ -209,15 +197,13 @@ export default function Cuotas() {
                 notaVacio="No te quedan cuotas por pagar."
               />
             </div>
-          </div>
+          </Card>
         </div>
       )}
 
       {/* Product list */}
       <div className="px-5 flex flex-col gap-4">
-        <p className="text-zinc-500 text-[10px] font-extrabold tracking-widest uppercase">
-          Tus Productos
-        </p>
+        <SectionLabel>Tus Productos</SectionLabel>
 
         {cuotas.length === 0 && (
           <p className="text-zinc-700 text-sm text-center py-8">Sin productos registrados.</p>
@@ -294,7 +280,7 @@ export default function Cuotas() {
                 <button
                   onClick={() => { marcarCuota(selected.id); setSelectedId(null) }}
                   disabled={selected.cuotasPagadas >= selected.cuotasTotales}
-                  className="flex-1 flex items-center justify-center gap-2 bg-white text-zinc-950 font-bold rounded-xl py-3.5 text-sm hover:opacity-90 transition-opacity disabled:opacity-30"
+                  className="flex-1 flex items-center justify-center gap-2 bg-accent text-white font-bold rounded-xl py-3.5 text-sm hover:opacity-90 transition-opacity disabled:opacity-40"
                 >
                   <Check size={16} />
                   {selected.cuotasPagadas < selected.cuotasTotales ? 'Marcar cuota' : 'Pagado'}
@@ -357,20 +343,18 @@ export default function Cuotas() {
           <h2 className="font-bold text-base">¿Eliminar producto?</h2>
           <p className="text-zinc-400 text-sm">Esta acción no se puede deshacer.</p>
           <div className="flex gap-3 mt-2">
-            <button
-              onClick={() => setConfirmId(null)}
-              className="flex-1 py-3 rounded-xl bg-zinc-800 text-zinc-300 font-bold text-sm"
-            >
+            <Button variante="secundario" className="flex-1" onClick={() => setConfirmId(null)}>
               Cancelar
-            </button>
-            <button
+            </Button>
+            <Button
+              variante="peligro"
+              className="flex-1"
               onClick={() => {
                 if (confirmId) { eliminar(confirmId); setConfirmId(null); setSelectedId(null) }
               }}
-              className="flex-1 py-3 rounded-xl bg-red-500/20 text-red-400 font-bold text-sm"
             >
               Eliminar
-            </button>
+            </Button>
           </div>
         </div>
       </Modal>
@@ -399,8 +383,8 @@ function FormEditarCuota({
   const [error, setError]                 = useState<string | null>(null)
   const [guardando, setGuardando]         = useState(false)
 
-  const inputCls = "bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-accent transition-colors placeholder:text-zinc-600 w-full"
-  const labelCls = "text-zinc-500 text-[10px] font-extrabold tracking-widest uppercase mb-1.5 block"
+  const inputCls = INPUT
+  const labelCls = LABEL
 
   const totales  = parseInt(cuotasTotales) || 0
   const pagadas  = parseInt(cuotasPagadas) || 0
@@ -480,10 +464,10 @@ function FormEditarCuota({
       {error && <p className="text-red-400 text-xs">{error}</p>}
 
       <div className="flex gap-3">
-        <button type="button" onClick={onCancel}
-          className="flex-1 py-3 rounded-xl bg-zinc-800 text-zinc-300 font-bold text-sm hover:bg-zinc-700 transition-colors">
+        <Button type="button" variante="secundario" className="flex-1" onClick={onCancel}>
+
           Cancelar
-        </button>
+        </Button>
         <button type="submit" disabled={guardando}
           className="flex-1 py-3 rounded-xl bg-accent text-white font-bold text-sm hover:opacity-90 transition-opacity disabled:opacity-40">
           {guardando ? 'Guardando...' : 'Guardar cambios'}
@@ -505,7 +489,7 @@ function FormNuevaCompra({
   const [montoCuota, setMontoCuota] = useState('')
   const [metodo, setMetodo] = useState('')
 
-  const inputCls = "bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-accent transition-colors placeholder:text-zinc-600 w-full"
+  const inputCls = INPUT
 
   function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -529,17 +513,12 @@ function FormNuevaCompra({
         <input className={inputCls} type="number" placeholder="Valor Cuota" value={montoCuota} onChange={e => setMontoCuota(e.target.value.replace(/\D/g,''))} min="0" required />
       </div>
       <div>
-        <p className="text-zinc-500 text-[10px] font-extrabold tracking-widest uppercase mb-2">
+        <SectionLabel className="mb-2">
           Con qué la pagas
-        </p>
+        </SectionLabel>
         <MetodoPicker valor={metodo} onChange={setMetodo} opcional />
       </div>
-      <button
-        type="submit"
-        className="bg-white text-zinc-950 font-bold rounded-xl py-3 text-sm hover:opacity-90 transition-opacity"
-      >
-        Guardar
-      </button>
+      <Button type="submit">Guardar</Button>
     </form>
   )
 }

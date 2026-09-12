@@ -1,5 +1,6 @@
 import { ArrowDown, ArrowUp, Minus } from 'lucide-react'
 import { ESTADO } from '../lib/colors'
+import { Card } from './ui'
 
 /**
  * Un valor con su contexto. Para una sola cifra esto es la forma correcta: un
@@ -20,7 +21,7 @@ export default function StatTile({
   acento?: boolean
 }) {
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 flex flex-col gap-1 min-w-0">
+    <Card className="flex flex-col gap-1 min-w-0">
       <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-wider truncate">
         {etiqueta}
       </p>
@@ -38,7 +39,7 @@ export default function StatTile({
       {medidor && <Medidor {...medidor} />}
 
       {nota && <p className="text-zinc-600 text-xs leading-snug mt-0.5">{nota}</p>}
-    </div>
+    </Card>
   )
 }
 

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Flag, Plus, Trash2, CheckCircle, Circle } from 'lucide-react'
+import { Flag, Plus, Trash2, CheckCircle, Circle, PiggyBank } from 'lucide-react'
 import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement,
   LineElement, Title, Tooltip, Legend, Filler,
@@ -9,6 +9,7 @@ import { useAhorros, useMetas } from '../store/useAhorros'
 import ChartContainer from '../components/ChartContainer'
 import Modal from '../components/Modal'
 import StatTile from '../components/StatTile'
+import { PageHeader, CardHeader, SectionLabel, Button, IconButton, Card, INPUT } from '../components/ui'
 import { formatCLP, formatFecha, mesLabel } from '../lib/format'
 import type { Ahorro, MetaAhorro } from '../types'
 
@@ -188,23 +189,14 @@ export default function Ahorros() {
 
   return (
     <div className="min-h-full bg-zinc-950 pb-4">
-      {/* Header */}
-      <div className="flex items-start justify-between px-5 pt-6 pb-4">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight">Mis Ahorros</h1>
-          <p className="text-zinc-500 text-sm mt-0.5">Gestiona tu capital y metas.</p>
-        </div>
-        <button
+      <PageHeader Icono={PiggyBank} titulo="Ahorros" subtitulo="Tu capital y las metas que te pusiste">
+        <IconButton
+          Icono={Flag}
+          activo={showMetas}
+          title={showMetas ? 'Ocultar metas' : 'Ver metas'}
           onClick={() => setShowMetas(v => !v)}
-          className={`p-2 rounded-xl border transition-colors ${
-            showMetas
-              ? 'bg-accent border-accent text-white'
-              : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-zinc-300'
-          }`}
-        >
-          <Flag size={18} />
-        </button>
-      </div>
+        />
+      </PageHeader>
 
       {/*
         * Dos columnas en pantallas anchas: la izquierda concentra el análisis
@@ -227,9 +219,9 @@ export default function Ahorros() {
             <Line data={chartData} options={chartOpts as never} />
           </ChartContainer>
         ) : (
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 text-center text-zinc-700 text-sm">
+          <Card className="py-10 text-center text-zinc-700 text-sm">
             Agrega movimientos para ver el gráfico.
-          </div>
+          </Card>
         )}
         </div>
 
@@ -239,9 +231,10 @@ export default function Ahorros() {
         {showMetas && (
           <div className="bg-zinc-900 border border-accent/20 rounded-2xl p-4 flex flex-col gap-3 animate-slide-up">
             <div className="flex items-center justify-between">
-              <p className="text-white font-bold">Metas de Ahorro</p>
+              <p className="text-white font-bold">Metas de ahorro</p>
               <button
                 onClick={() => setShowMetaForm(v => !v)}
+                title="Nueva meta"
                 className="text-accent hover:opacity-80 transition-opacity"
               >
                 <Plus size={18} />
@@ -289,18 +282,16 @@ export default function Ahorros() {
           </div>
         )}
 
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-4 border-b border-zinc-800">
-            <p className="text-white font-bold">Movimientos</p>
-            <button
+        <Card tipo="lista">
+          <CardHeader titulo="Movimientos">
+            <Button
+              tamano="sm"
+              variante={showForm ? 'secundario' : 'primario'}
               onClick={() => setShowForm(v => !v)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                showForm ? 'bg-zinc-800 text-zinc-400' : 'bg-white text-zinc-950'
-              }`}
             >
               {showForm ? 'Cerrar' : '+ Añadir'}
-            </button>
-          </div>
+            </Button>
+          </CardHeader>
 
           {showForm && (
             <div className="p-4 border-b border-zinc-800">
@@ -312,9 +303,9 @@ export default function Ahorros() {
 
           {/* Table header */}
           <div className="grid grid-cols-[74px_1fr_auto_32px] gap-2 px-4 py-2.5">
-            <span className="text-zinc-600 text-[10px] font-bold uppercase">Fecha</span>
-            <span className="text-zinc-600 text-[10px] font-bold uppercase">Tipo</span>
-            <span className="text-zinc-600 text-[10px] font-bold uppercase">Monto</span>
+            <SectionLabel>Fecha</SectionLabel>
+            <SectionLabel>Tipo</SectionLabel>
+            <SectionLabel>Monto</SectionLabel>
             <span />
           </div>
 
@@ -339,7 +330,7 @@ export default function Ahorros() {
               </button>
             </div>
           ))}
-        </div>
+        </Card>
         </div>
       </div>
 
@@ -349,11 +340,11 @@ export default function Ahorros() {
           <h2 className="font-bold text-base">¿Eliminar registro?</h2>
           <p className="text-zinc-400 text-sm">Se borrará permanentemente.</p>
           <div className="flex gap-3 mt-2">
-            <button onClick={() => setConfirmAhorroId(null)} className="flex-1 py-3 rounded-xl bg-zinc-800 text-zinc-300 font-bold text-sm">Cancelar</button>
-            <button
+            <Button variante="secundario" className="flex-1" onClick={() => setConfirmAhorroId(null)}>Cancelar</Button>
+            <Button
+              variante="peligro" className="flex-1"
               onClick={() => { if (confirmAhorroId) { eliminarAhorro(confirmAhorroId); setConfirmAhorroId(null) } }}
-              className="flex-1 py-3 rounded-xl bg-red-500/20 text-red-400 font-bold text-sm"
-            >Eliminar</button>
+            >Eliminar</Button>
           </div>
         </div>
       </Modal>
@@ -364,11 +355,11 @@ export default function Ahorros() {
           <h2 className="font-bold text-base">¿Eliminar meta?</h2>
           <p className="text-zinc-400 text-sm">Se quitará de tus objetivos.</p>
           <div className="flex gap-3 mt-2">
-            <button onClick={() => setConfirmMetaId(null)} className="flex-1 py-3 rounded-xl bg-zinc-800 text-zinc-300 font-bold text-sm">Cancelar</button>
-            <button
+            <Button variante="secundario" className="flex-1" onClick={() => setConfirmMetaId(null)}>Cancelar</Button>
+            <Button
+              variante="peligro" className="flex-1"
               onClick={() => { if (confirmMetaId) { eliminarMeta(confirmMetaId); setConfirmMetaId(null) } }}
-              className="flex-1 py-3 rounded-xl bg-red-500/20 text-red-400 font-bold text-sm"
-            >Eliminar</button>
+            >Eliminar</Button>
           </div>
         </div>
       </Modal>
@@ -381,7 +372,7 @@ function FormNuevoAhorro({ onSave }: { onSave: (a: Omit<Ahorro, 'id'>) => void }
   const [fecha, setFecha] = useState(new Date().toISOString().slice(0, 10))
   const [esRetiro, setEsRetiro] = useState(false)
 
-  const inputCls = "bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-accent transition-colors placeholder:text-zinc-600 w-full"
+  const inputCls = INPUT
 
   function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -408,13 +399,14 @@ function FormNuevoAhorro({ onSave }: { onSave: (a: Omit<Ahorro, 'id'>) => void }
           <span className={`absolute top-0.5 w-5 h-5 rounded-full transition-all ${esRetiro ? 'left-5 bg-red-400' : 'left-0.5 bg-zinc-400'}`} />
         </button>
       </div>
+      {/* El retiro conserva el rojo: no es jerarquía, es advertencia de que resta. */}
       <button
         type="submit"
         className={`font-bold rounded-xl py-3 text-sm transition-opacity hover:opacity-90 ${
-          esRetiro ? 'bg-red-500 text-white' : 'bg-white text-zinc-950'
+          esRetiro ? 'bg-red-500/20 text-red-400' : 'bg-accent text-white'
         }`}
       >
-        {esRetiro ? 'Registrar Retiro' : 'Guardar Ahorro'}
+        {esRetiro ? 'Registrar retiro' : 'Guardar ahorro'}
       </button>
     </form>
   )
@@ -424,7 +416,7 @@ function FormNuevaMeta({ onSave }: { onSave: (m: Omit<MetaAhorro, 'id'>) => void
   const [nombre, setNombre] = useState('')
   const [monto, setMonto] = useState('')
 
-  const inputCls = "bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-white text-sm outline-none focus:border-accent transition-colors placeholder:text-zinc-600 w-full"
+  const inputCls = INPUT
 
   function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -437,9 +429,7 @@ function FormNuevaMeta({ onSave }: { onSave: (m: Omit<MetaAhorro, 'id'>) => void
     <form onSubmit={submit} className="flex flex-col gap-2 pb-2 border-b border-zinc-800">
       <input className={inputCls} placeholder="Nombre de la meta" value={nombre} onChange={e => setNombre(e.target.value)} required />
       <input className={inputCls} type="number" placeholder="Monto objetivo" value={monto} onChange={e => setMonto(e.target.value.replace(/\D/g,''))} required />
-      <button type="submit" className="bg-accent text-white font-bold rounded-xl py-2 text-sm hover:opacity-90 transition-opacity">
-        Añadir
-      </button>
+      <Button type="submit" tamano="sm" className="py-2">Añadir</Button>
     </form>
   )
 }

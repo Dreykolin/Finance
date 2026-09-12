@@ -154,6 +154,15 @@ _(ideas sin clasificar — van llegando acá)_
   contiguos y anulaba la garantía de separación.
   *Hecho 2026-09-12.*
 
+- [x] **T16 · Sistema visual unificado.**
+  Seis iteraciones habían dejado deriva: dos botones primarios distintos para la misma
+  acción, dos de cuatro títulos que no coincidían con su entrada del menú, icono de
+  cabecera en solo dos pantallas, tres rellenos de tarjeta y cinco definiciones del
+  mismo campo de formulario. Ahora hay primitivos en `components/ui.tsx` — Card,
+  CardHeader, SectionLabel, PageHeader, Button, IconButton, INPUT y LABEL — y las
+  cuatro pantallas los usan.
+  *Hecho 2026-09-12 — escritorio.*
+
 - [ ] **T15 · Nada de esto se ha visto renderizado.**
   Verificado: tipos, build, geometría de los gráficos en sus límites (1 a 12 columnas,
   colisión de etiquetas, desbordes) y la paleta con el verificador. **No verificado:**
