@@ -27,7 +27,6 @@ const CHART_OPTS_BASE = {
 
 export default function Gastos() {
   const { gastos, agregar, eliminar } = useGastos()
-  const [tab, setTab] = useState<'analisis' | 'historial'>('analisis')
   const [presupuesto, setPresupuesto] = useState(() => {
     return Number(localStorage.getItem('fin_presupuesto') ?? '0')
   })
@@ -59,29 +58,17 @@ export default function Gastos() {
         </button>
       </div>
 
-      {/* Tabs */}
-      <div className="flex border-b border-zinc-800 px-5">
-        {(['analisis', 'historial'] as const).map(t => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`pb-2.5 mr-6 text-xs font-extrabold tracking-widest uppercase transition-colors border-b-2 ${
-              tab === t
-                ? 'text-accent border-accent'
-                : 'text-zinc-500 border-transparent hover:text-zinc-300'
-            }`}
-          >
-            {t === 'analisis' ? 'Análisis' : 'Historial'}
-          </button>
-        ))}
-      </div>
-
-      <div className="p-5 flex flex-col gap-5">
-        {tab === 'analisis' ? (
+      {/*
+        * Mismo reparto que Ahorros: a la izquierda lo que se lee (análisis, fijo
+        * al hacer scroll), a la derecha lo que se edita (el registro, que crece).
+        * Las pestañas Análisis/Historial eran una concesión al ancho del móvil;
+        * en escritorio las dos vistas caben simultáneamente.
+        */}
+      <div className="px-5 pb-5 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-5 items-start">
+        <div className="flex flex-col gap-5 xl:sticky xl:top-5">
           <AnalisisTab gastos={gastos} presupuesto={presupuesto} />
-        ) : (
-          <HistorialTab gastos={gastos} onAgregar={agregar} onEliminar={eliminar} />
-        )}
+        </div>
+        <HistorialTab gastos={gastos} onAgregar={agregar} onEliminar={eliminar} />
       </div>
 
       {/* Settings modal */}
@@ -256,89 +243,55 @@ function HistorialTab({
 }) {
   const [showForm, setShowForm] = useState(false)
   const [verTodos, setVerTodos] = useState(false)
-  const [expandedId, setExpandedId] = useState<number | null>(null)
   const [confirmId, setConfirmId] = useState<number | null>(null)
 
-  const visibles = verTodos ? gastos : gastos.slice(0, 10)
+  const visibles = verTodos ? gastos : gastos.slice(0, 12)
 
   return (
-    <>
-      {/* Header row */}
-      <div className="flex items-center justify-between">
-        <span className="text-zinc-500 text-[10px] font-extrabold tracking-widest uppercase">
-          Movimientos
-        </span>
+    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-4 border-b border-zinc-800">
+        <p className="text-white font-bold">Movimientos</p>
         <button
           onClick={() => setShowForm(v => !v)}
           className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-            showForm
-              ? 'bg-zinc-800 text-zinc-400'
-              : 'bg-white text-zinc-950'
+            showForm ? 'bg-zinc-800 text-zinc-400' : 'bg-white text-zinc-950'
           }`}
         >
           {showForm ? 'Cerrar' : '+ Añadir'}
         </button>
       </div>
 
-      {/* Form */}
       {showForm && (
-        <FormNuevoGasto
-          onSave={g => { onAgregar(g); setShowForm(false) }}
-          onCancel={() => setShowForm(false)}
-        />
+        <div className="p-4 border-b border-zinc-800">
+          <FormNuevoGasto
+            onSave={g => { onAgregar(g); setShowForm(false) }}
+            onCancel={() => setShowForm(false)}
+          />
+        </div>
       )}
 
-      {/* List */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
-        {/* Table header */}
-        <div className="grid grid-cols-[80px_1fr_auto] gap-2 px-4 py-3 border-b border-zinc-800">
-          <span className="text-zinc-600 text-[10px] font-bold uppercase">Fecha</span>
-          <span className="text-zinc-600 text-[10px] font-bold uppercase">Descripción</span>
-          <span className="text-zinc-600 text-[10px] font-bold uppercase">Monto</span>
-        </div>
-
-        {gastos.length === 0 && (
-          <div className="py-10 text-center text-zinc-700 text-sm">Sin registros</div>
-        )}
-
-        {visibles.map(g => (
-          <div key={g.id}>
-            <button
-              className="w-full grid grid-cols-[80px_1fr_auto] gap-2 px-4 py-3.5 text-left hover:bg-zinc-800/40 transition-colors border-b border-zinc-800/60"
-              onClick={() => setExpandedId(expandedId === g.id ? null : g.id)}
-            >
-              <span className="text-zinc-500 text-xs">{formatFecha(g.fecha)}</span>
-              <span className="text-white text-sm truncate">{g.descripcion}</span>
-              <span className="text-white text-sm font-bold whitespace-nowrap">{formatCLP(g.monto)}</span>
-            </button>
-            {expandedId === g.id && (
-              <div className="flex items-center justify-between px-4 py-2.5 bg-zinc-800/30 border-b border-zinc-800/60 animate-fade-in">
-                <button
-                  onClick={() => setConfirmId(g.id)}
-                  className="text-red-500/80 hover:text-red-400 transition-colors"
-                >
-                  <Trash2 size={16} />
-                </button>
-                <span className="bg-zinc-800 text-zinc-400 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded">
-                  {g.metodoPago}
-                </span>
-              </div>
-            )}
-          </div>
-        ))}
-
-        {gastos.length > 10 && (
-          <button
-            onClick={() => setVerTodos(v => !v)}
-            className="w-full flex items-center justify-center gap-1.5 py-3.5 text-accent text-sm font-bold hover:bg-zinc-800/30 transition-colors"
-          >
-            <ChevronDown size={16} className={`transition-transform ${verTodos ? 'rotate-180' : ''}`} />
-            {verTodos ? 'Ver menos' : `Ver todos (${gastos.length})`}
-          </button>
-        )}
+      <div className="grid grid-cols-[64px_1fr_auto] gap-2 px-4 py-2.5">
+        <span className="text-zinc-600 text-[10px] font-bold uppercase">Fecha</span>
+        <span className="text-zinc-600 text-[10px] font-bold uppercase">Descripción</span>
+        <span className="text-zinc-600 text-[10px] font-bold uppercase">Monto</span>
       </div>
 
-      {/* Confirm delete */}
+      {gastos.length === 0 && (
+        <div className="py-10 text-center text-zinc-700 text-sm">Sin registros</div>
+      )}
+
+      {visibles.map(g => <GastoRow key={g.id} g={g} onDelete={() => setConfirmId(g.id)} />)}
+
+      {gastos.length > 12 && (
+        <button
+          onClick={() => setVerTodos(v => !v)}
+          className="w-full flex items-center justify-center gap-1.5 py-3.5 text-accent text-sm font-bold hover:bg-zinc-800/30 transition-colors border-t border-zinc-800/60"
+        >
+          <ChevronDown size={16} className={`transition-transform ${verTodos ? 'rotate-180' : ''}`} />
+          {verTodos ? 'Ver menos' : `Ver todos (${gastos.length})`}
+        </button>
+      )}
+
       <Modal open={confirmId !== null} onClose={() => setConfirmId(null)}>
         <div className="flex flex-col gap-4">
           <h2 className="font-bold text-base">¿Eliminar gasto?</h2>
@@ -351,7 +304,7 @@ function HistorialTab({
               Cancelar
             </button>
             <button
-              onClick={() => { if (confirmId) { onEliminar(confirmId); setConfirmId(null); setExpandedId(null) } }}
+              onClick={() => { if (confirmId) { onEliminar(confirmId); setConfirmId(null) } }}
               className="flex-1 py-3 rounded-xl bg-red-500/20 text-red-400 font-bold text-sm hover:bg-red-500/30 transition-colors"
             >
               Eliminar
@@ -359,9 +312,54 @@ function HistorialTab({
           </div>
         </div>
       </Modal>
-    </>
+    </div>
   )
 }
+
+/**
+ * Fila del historial. En la columna estrecha la descripción no cabe entera, así
+ * que se recorta en una línea; al abrir la fila se muestra completa, junto al
+ * método de pago y la acción de borrar.
+ */
+function GastoRow({ g, onDelete }: { g: Gasto; onDelete: () => void }) {
+  const [abierto, setAbierto] = useState(false)
+  const auto = ORIGEN_LABEL[g.origen]
+
+  return (
+    <div className={`border-t border-zinc-800/60 transition-colors ${abierto ? 'bg-zinc-800/30' : ''}`}>
+      <button
+        className="w-full grid grid-cols-[64px_1fr_auto] gap-2 px-4 py-3 text-left hover:bg-zinc-800/40 transition-colors"
+        onClick={() => setAbierto(v => !v)}
+      >
+        <span className="text-zinc-500 text-xs self-center">{formatFecha(g.fecha)}</span>
+        <span className="text-white text-sm truncate self-center">{g.descripcion}</span>
+        <span className="text-white text-sm font-bold whitespace-nowrap self-center tabular-nums">
+          {formatCLP(g.monto)}
+        </span>
+      </button>
+
+      {abierto && (
+        <div className="px-4 pb-3 flex flex-col gap-2.5 animate-fade-in">
+          <p className="text-zinc-300 text-sm leading-snug break-words">{g.descripcion}</p>
+          <div className="flex items-center justify-between">
+            <button
+              onClick={onDelete}
+              className="text-red-500/80 hover:text-red-400 transition-colors"
+            >
+              <Trash2 size={16} />
+            </button>
+            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded ${
+              auto ? 'bg-accent/15 text-accent' : 'bg-zinc-800 text-zinc-400'
+            }`}>
+              {auto || g.metodoPago || 'Sin método'}
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 
 function FormNuevoGasto({
   onSave, onCancel,

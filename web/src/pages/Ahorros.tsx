@@ -167,6 +167,20 @@ export default function Ahorros() {
           )}
         </div>
 
+        {/* Chart */}
+        {ahorros.length > 0 ? (
+          <ChartContainer title="Crecimiento vs Meta" height={300}>
+            <Line data={chartData} options={chartOpts as never} />
+          </ChartContainer>
+        ) : (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 text-center text-zinc-700 text-sm">
+            Agrega movimientos para ver el gráfico.
+          </div>
+        )}
+        </div>
+
+        {/* ── Columna derecha: metas y registro ── */}
+        <div className="flex flex-col gap-5">
         {/* Metas panel */}
         {showMetas && (
           <div className="bg-zinc-900 border border-accent/20 rounded-2xl p-4 flex flex-col gap-3 animate-slide-up">
@@ -221,19 +235,6 @@ export default function Ahorros() {
           </div>
         )}
 
-        {/* Chart */}
-        {ahorros.length > 0 ? (
-          <ChartContainer title="Crecimiento vs Meta" height={300}>
-            <Line data={chartData} options={chartOpts as never} />
-          </ChartContainer>
-        ) : (
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 text-center text-zinc-700 text-sm">
-            Agrega movimientos para ver el gráfico.
-          </div>
-        )}
-        </div>
-
-        {/* ── Columna derecha: registro ── */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
           <div className="flex items-center justify-between px-4 py-4 border-b border-zinc-800">
             <p className="text-white font-bold">Movimientos</p>
@@ -284,6 +285,7 @@ export default function Ahorros() {
               </button>
             </div>
           ))}
+        </div>
         </div>
       </div>
 

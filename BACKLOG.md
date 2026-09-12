@@ -71,8 +71,12 @@ _(ideas sin clasificar — van llegando acá)_
   El desktop heredaba el apilado vertical del mobile. Ahora: columna izquierda con saldo, grafico y metas (fija al hacer scroll); columna derecha de 380px con el registro de movimientos. Apilado por debajo de `xl`.
   *Hecho 2026-09-12.*
 
-- [ ] **T13 . Mismo tratamiento de layout para Gastos desktop.**
-  Analisis apila tendencia y distribucion en una columna; podrian convivir lado a lado. Historial es una lista plana sin navegacion por mes (ver T8).
+- [x] **T13 . Mismo tratamiento de layout para Gastos desktop.**
+  Dos columnas como Ahorros: analisis a la izquierda (fijo al scrollear), movimientos a la derecha. **Se quitaron las pestanas Analisis/Historial**: existian por el ancho del movil, y en escritorio ambas vistas caben a la vez. La fila del historial recorta la descripcion a una linea y la muestra completa al abrirla, junto al metodo y el borrar; los gastos automaticos muestran su origen (Cuotas / Suscripciones) en lugar de un metodo vacio.
+  *Hecho 2026-09-12.*
+
+- [ ] **T14 . Navegacion por mes en el historial de escritorio.**
+  Mobile permite moverse entre meses y muestra el avance del presupuesto; el escritorio sigue con una lista plana de 12 + "ver todos", sin forma de mirar el mes pasado. Es el hueco funcional mas grande que queda en desktop.
 
 - [ ] **T8 · Paridad mobile de lo aplicado en desktop.**
   Quedó pendiente a propósito (se priorizó desktop). Falta en mobile: edición de cuotas + deshacer (F3), donut por `origen` y toggle monto/frecuencia (B5), gráfico de Ahorros con líneas de meta — hoy **mobile no tiene gráfico alguno en Ahorros** (F4).
