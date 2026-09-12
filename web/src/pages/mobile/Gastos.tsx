@@ -370,8 +370,9 @@ function TendenciaChart({ gastos, presupuesto }: { gastos: Gasto[]; presupuesto:
       </div>
 
       {expanded && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
-          <div className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+        <div className="fixed inset-0 z-[var(--z-dialogo)] flex items-center justify-center px-4">
+          <div className="absolute inset-0 bg-black/70 animate-fade-in" onClick={() => setExpanded(false)} />
+          <div className="relative w-full bg-zinc-900 border border-zinc-800 rounded-2xl p-4 animate-dialogo-in">
             <div className="flex items-center justify-between mb-3">
               <p className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-widest">Tendencia Mensual</p>
               <button onClick={() => setExpanded(false)} className="w-7 h-7 flex items-center justify-center rounded-lg bg-zinc-800 text-zinc-400 active:bg-zinc-700">
@@ -660,7 +661,7 @@ export default function MobileGastos() {
       {/* FAB */}
       {tab === 'historial' && (
         <button onClick={() => setShowForm(true)}
-          className="fixed bottom-24 right-5 w-14 h-14 bg-accent rounded-full flex items-center justify-center shadow-lg shadow-accent/30 active:scale-95 transition-transform text-white text-2xl font-light z-30">
+          className="fixed bottom-24 right-5 w-14 h-14 bg-accent rounded-full flex items-center justify-center shadow-lg shadow-accent/30 active:scale-95 transition-transform text-white text-2xl font-light z-[var(--z-flotante)]">
           +
         </button>
       )}
@@ -703,11 +704,13 @@ function GastoRow({ g, onDelete }: { g: Gasto; onDelete: () => void }) {
         <span className="text-white font-bold text-sm ml-2 flex-shrink-0">{formatCLP(g.monto)}</span>
       </div>
       {expanded && (
-        <div className="flex items-center justify-between mt-3 pt-3 border-t border-zinc-800">
+        <div className="animate-despliegue">
+          <div className="flex items-center justify-between mt-3 pt-3 border-t border-zinc-800">
           <button onClick={e => { e.stopPropagation(); onDelete() }} className="text-red-500/70 active:text-red-400">
             <Trash2 size={18} />
           </button>
           <Insignia gasto={g} />
+          </div>
         </div>
       )}
     </div>

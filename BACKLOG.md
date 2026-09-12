@@ -70,6 +70,20 @@ _(ideas sin clasificar — van llegando acá)_
   Usa la fecha de hoy en vez de la fecha de cobro del período, así que el gasto puede
   quedar con un día que no corresponde. Solo afecta a la vista móvil.
 
+- [x] **B12 · La barra de navegación se dibujaba encima de los diálogos.**
+  `MobileNav` y `Modal` compartían `z-50`, y la barra se monta después en el árbol: con
+  el mismo z-index ganaba ella. El resultado era una barra flotando sobre el fondo
+  oscurecido del diálogo, **y además pulsable**. Ahora hay una escala declarada en
+  `index.css` (flotante 20 · navegación 30 · diálogo 50) y nadie reparte z-index a ojo.
+  *Hecho 2026-09-12.*
+
+- [x] **B13 · Dos diálogos abiertos se pisaban el bloqueo del scroll.**
+  En Cuotas, el diálogo de detalle abre el de confirmación. El bloqueo era un booleano,
+  así que al cerrar el segundo el fondo volvía a desplazarse con el primero todavía
+  abierto. Ahora se lleva por pila, que además decide quién atiende Escape (solo el de
+  arriba) y sitúa cada diálogo por encima del anterior.
+  *Hecho 2026-09-12.*
+
 ---
 
 ## T — Técnico / deuda
@@ -116,6 +130,15 @@ _(ideas sin clasificar — van llegando acá)_
   cuotas, método de pago en ambas altas, indicadores en las cuatro, y **gráfico de evolución
   en Ahorros**, que no tenía ninguno. La lógica del carril vive en `lib/cargos.ts` y la
   consumen las dos plataformas.
+  *Hecho 2026-09-12.*
+
+- [x] **T18 · Movimiento con criterio, no por defecto.**
+  Dos duraciones y dos curvas en `index.css`, con la salida siempre más rápida que la
+  entrada. Los diálogos ahora **se cierran animados** (antes el fondo se desvanecía y la
+  ventana desaparecía de golpe), suben como hoja en el teléfono y crecen en su sitio en
+  escritorio. Las filas que se despliegan animan su altura con la retícula en lugar de
+  saltar. Se respeta `prefers-reduced-motion`: quien lo pide recibe el cambio de estado
+  sin el trayecto.
   *Hecho 2026-09-12.*
 
 - [ ] **T17 · El zoom del gráfico de tendencia sigue siendo solo móvil.**

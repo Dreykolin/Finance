@@ -5,17 +5,104 @@
   --color-accent-dim: rgba(139, 92, 246, 0.15);
 }
 
-@keyframes slide-up {
-  from { transform: translateY(24px); opacity: 0; }
-  to   { transform: translateY(0);    opacity: 1; }
-}
-@keyframes fade-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+/* ─────────────────────────────────────────────────────────────────────────
+   Superposición
+
+   Una sola escala, declarada aquí, para no volver a repartir z-index a ojo.
+   El fallo que motivó escribirla: la barra inferior y el diálogo compartían
+   z-50, y como la barra se monta después en el árbol, se dibujaba sobre el
+   fondo oscurecido del diálogo — y seguía siendo pulsable.
+
+     contenido   auto
+     flotante    20   (botón de acción flotante)
+     navegación  30   (barra lateral y barra inferior)
+     diálogo     50   (modales y vistas a pantalla completa)
+
+   Hay un salto entre tramos a propósito: deja sitio para intercalar algo sin
+   tener que renumerar lo de al lado.
+   ───────────────────────────────────────────────────────────────────────── */
+:root {
+  --z-flotante: 20;
+  --z-navegacion: 30;
+  --z-dialogo: 50;
 }
 
-.animate-slide-up { animation: slide-up 0.22s ease-out; }
-.animate-fade-in  { animation: fade-in 0.15s ease-out; }
+/* ─────────────────────────────────────────────────────────────────────────
+   Movimiento
+
+   Dos duraciones y dos curvas, no más. La salida siempre es más rápida que la
+   entrada: al abrir algo se acompaña al usuario, al cerrarlo se le quita de en
+   medio.
+   ───────────────────────────────────────────────────────────────────────── */
+:root {
+  --dur-entrada: 260ms;
+  --dur-salida: 160ms;
+  --dur-breve: 140ms;
+  /* Desacelera rápido y se asienta: da sensación de peso sin rebote. */
+  --curva-entrada: cubic-bezier(0.16, 1, 0.3, 1);
+  --curva-salida: cubic-bezier(0.4, 0, 1, 1);
+}
+
+@keyframes fade-in  { from { opacity: 0 } to { opacity: 1 } }
+@keyframes fade-out { from { opacity: 1 } to { opacity: 0 } }
+
+/* Escritorio: el diálogo aparece en su sitio, creciendo apenas. */
+@keyframes dialogo-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+@keyframes dialogo-out {
+  from { opacity: 1; transform: translateY(0)   scale(1); }
+  to   { opacity: 0; transform: translateY(8px) scale(0.97); }
+}
+
+/* Teléfono: hoja que sube desde el borde inferior, de donde viene el pulgar. */
+@keyframes hoja-in  { from { transform: translateY(100%) } to { transform: translateY(0) } }
+@keyframes hoja-out { from { transform: translateY(0) } to { transform: translateY(100%) } }
+
+@keyframes slide-up {
+  from { transform: translateY(12px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+.animate-fade-in  { animation: fade-in  var(--dur-breve)   var(--curva-entrada); }
+.animate-fade-out { animation: fade-out var(--dur-salida)  var(--curva-salida) forwards; }
+.animate-slide-up { animation: slide-up var(--dur-entrada) var(--curva-entrada); }
+
+/* Despliegue de una fila: la altura se anima con la retícula, que es la única
+   forma de ir de cero a "auto" sin medir en JavaScript. */
+@keyframes despliegue {
+  from { grid-template-rows: 0fr; opacity: 0; }
+  to   { grid-template-rows: 1fr; opacity: 1; }
+}
+.animate-despliegue {
+  display: grid;
+  animation: despliegue var(--dur-entrada) var(--curva-entrada);
+}
+.animate-despliegue > * { overflow: hidden; min-height: 0; }
+
+.animate-dialogo-in  { animation: hoja-in  var(--dur-entrada) var(--curva-entrada); }
+.animate-dialogo-out { animation: hoja-out var(--dur-salida)  var(--curva-salida) forwards; }
+
+@media (min-width: 768px) {
+  .animate-dialogo-in  { animation-name: dialogo-in; }
+  .animate-dialogo-out { animation-name: dialogo-out; }
+}
+
+/* Quien pide menos movimiento recibe el cambio de estado, no el trayecto:
+   las cosas siguen apareciendo y desapareciendo, pero sin desplazarse. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+  .animate-dialogo-in,
+  .animate-despliegue,
+  .animate-slide-up { animation: fade-in 1ms both; }
+  .animate-dialogo-out { animation: fade-out 1ms both; }
+}
 
 * { box-sizing: border-box; }
 

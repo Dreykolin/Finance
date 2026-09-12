@@ -14,7 +14,7 @@ export default function Nav() {
   return (
     <>
       {/* ── Mobile bottom bar ── */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-zinc-950/95 backdrop-blur-sm border-t border-zinc-800 flex safe-area-bottom">
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-[var(--z-navegacion)] bg-zinc-950/95 backdrop-blur-sm border-t border-zinc-800 flex safe-area-bottom">
         {tabs.map(({ to, Icon, label }) => (
           <NavLink key={to} to={to} className={({ isActive }) =>
             `flex-1 flex flex-col items-center justify-center py-2 gap-1 transition-colors ${
@@ -28,7 +28,7 @@ export default function Nav() {
       </nav>
 
       {/* ── Desktop sidebar ── */}
-      <aside className="hidden md:flex flex-col w-56 h-full bg-zinc-950 border-r border-zinc-800 fixed left-0 top-0 z-40">
+      <aside className="hidden md:flex flex-col w-56 h-full bg-zinc-950 border-r border-zinc-800 fixed left-0 top-0 z-[var(--z-navegacion)]">
         <div className="px-6 py-6 border-b border-zinc-800">
           <h1 className="text-lg font-extrabold tracking-tight">Finanzas</h1>
           <p className="text-zinc-500 text-xs mt-0.5">Panel personal</p>

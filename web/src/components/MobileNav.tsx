@@ -10,7 +10,7 @@ const tabs = [
 
 export default function MobileNav() {
   return (
-    <nav className="fixed bottom-0 inset-x-0 z-50 bg-zinc-950/95 backdrop-blur-sm border-t border-zinc-800 flex safe-area-bottom">
+    <nav className="fixed bottom-0 inset-x-0 z-[var(--z-navegacion)] bg-zinc-950/95 backdrop-blur-sm border-t border-zinc-800 flex safe-area-bottom">
       {tabs.map(({ to, Icon, label }) => (
         <NavLink key={to} to={to} className={({ isActive }) =>
           `flex-1 flex flex-col items-center justify-center py-3 gap-1 transition-colors ${

@@ -445,7 +445,8 @@ function GastoRow({ g, onDelete }: { g: Gasto; onDelete: () => void }) {
       </button>
 
       {abierto && (
-        <div className="px-4 pb-3 flex flex-col gap-2.5 animate-fade-in">
+        <div className="animate-despliegue">
+          <div className="px-4 pb-3 flex flex-col gap-2.5">
           <p className="text-zinc-300 text-sm leading-snug break-words">{g.descripcion}</p>
           <div className="flex items-center justify-between">
             <button
@@ -459,6 +460,7 @@ function GastoRow({ g, onDelete }: { g: Gasto; onDelete: () => void }) {
             }`}>
               {auto || g.metodoPago || 'Sin método'}
             </span>
+          </div>
           </div>
         </div>
       )}

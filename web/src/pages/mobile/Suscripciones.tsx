@@ -74,7 +74,8 @@ function FilaServicio({ s, periodos, onAlternar, onEditar, onBaja, onEliminar }:
       </div>
 
       {abierto && (
-        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-zinc-800 animate-fade-in">
+        <div className="animate-despliegue">
+          <div className="flex items-center gap-2 mt-3 pt-3 border-t border-zinc-800">
           <Button tamano="sm" variante="secundario" onClick={onEditar}
             className="flex items-center gap-1.5">
             <Pencil size={13} /> Editar
@@ -87,6 +88,7 @@ function FilaServicio({ s, periodos, onAlternar, onEditar, onBaja, onEliminar }:
             className="ml-auto text-zinc-600 active:text-red-400 p-1.5">
             <Trash2 size={16} />
           </button>
+          </div>
         </div>
       )}
     </div>
