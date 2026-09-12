@@ -89,7 +89,7 @@ export default function Ahorros() {
 
   const chartOpts = {
     responsive: true,
-    maintainAspectRatio: true,
+    maintainAspectRatio: false,
     plugins: {
       legend: {
         display: metasActivas.length > 0,
@@ -134,7 +134,14 @@ export default function Ahorros() {
         </button>
       </div>
 
-      <div className="px-5 flex flex-col gap-5">
+      {/*
+        * Dos columnas en pantallas anchas: la izquierda concentra el análisis
+        * (saldo, gráfico, metas) y queda fija; la derecha es el flujo de
+        * registro, que es lo que crece. Apilado por debajo de xl, donde el
+        * ancho útil ya no alcanza para dos columnas.
+        */}
+      <div className="px-5 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-5 items-start">
+        <div className="flex flex-col gap-5 xl:sticky xl:top-5">
         {/* Total card */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 flex items-center justify-between">
           <div>
@@ -216,7 +223,7 @@ export default function Ahorros() {
 
         {/* Chart */}
         {ahorros.length > 0 ? (
-          <ChartContainer title="Crecimiento vs Meta">
+          <ChartContainer title="Crecimiento vs Meta" height={300}>
             <Line data={chartData} options={chartOpts as never} />
           </ChartContainer>
         ) : (
@@ -224,8 +231,9 @@ export default function Ahorros() {
             Agrega movimientos para ver el gráfico.
           </div>
         )}
+        </div>
 
-        {/* Movimientos */}
+        {/* ── Columna derecha: registro ── */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
           <div className="flex items-center justify-between px-4 py-4 border-b border-zinc-800">
             <p className="text-white font-bold">Movimientos</p>
@@ -248,7 +256,7 @@ export default function Ahorros() {
           )}
 
           {/* Table header */}
-          <div className="grid grid-cols-[90px_1fr_auto_36px] gap-2 px-4 py-2.5">
+          <div className="grid grid-cols-[74px_1fr_auto_32px] gap-2 px-4 py-2.5">
             <span className="text-zinc-600 text-[10px] font-bold uppercase">Fecha</span>
             <span className="text-zinc-600 text-[10px] font-bold uppercase">Tipo</span>
             <span className="text-zinc-600 text-[10px] font-bold uppercase">Monto</span>
@@ -260,7 +268,7 @@ export default function Ahorros() {
           )}
 
           {ahorros.map(a => (
-            <div key={a.id} className="grid grid-cols-[90px_1fr_auto_36px] gap-2 px-4 py-3 items-center border-t border-zinc-800/60">
+            <div key={a.id} className="grid grid-cols-[74px_1fr_auto_32px] gap-2 px-4 py-3 items-center border-t border-zinc-800/60">
               <span className="text-zinc-500 text-xs">{formatFecha(a.fecha)}</span>
               <span className={`text-[10px] font-extrabold uppercase tracking-wider ${a.esRetiro ? 'text-red-400' : 'text-accent'}`}>
                 {a.esRetiro ? 'Retiro' : 'Ahorro'}
@@ -327,7 +335,7 @@ function FormNuevoAhorro({ onSave }: { onSave: (a: Omit<Ahorro, 'id'>) => void }
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-3">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="flex flex-col gap-3">
         <input className={inputCls} type="number" placeholder="Monto" value={monto} onChange={e => setMonto(e.target.value.replace(/\D/g,''))} required />
         <input className={inputCls} type="date" value={fecha} onChange={e => setFecha(e.target.value)} required />
       </div>

@@ -63,6 +63,17 @@ _(ideas sin clasificar — van llegando acá)_
 - [ ] **T6 · Token OAuth viaja en la query string.**
   `?token=...` queda en el historial del navegador y en logs de servidores intermedios antes del `replaceState`. Alternativa: fragmento (`#token=`) o cookie httpOnly.
 
+- [x] **T11 . Los graficos escalaban con el ancho de pantalla.**
+  Chart.js con `maintainAspectRatio: true` en un contenedor de ~1100px dibujaba un grafico de ~550px de alto. Ahora `ChartContainer` fija la altura (280px por defecto) y los graficos usan `maintainAspectRatio: false`.
+  *Hecho 2026-09-12 - Gastos y Ahorros desktop.*
+
+- [x] **T12 . Ahorros desktop en dos columnas.**
+  El desktop heredaba el apilado vertical del mobile. Ahora: columna izquierda con saldo, grafico y metas (fija al hacer scroll); columna derecha de 380px con el registro de movimientos. Apilado por debajo de `xl`.
+  *Hecho 2026-09-12.*
+
+- [ ] **T13 . Mismo tratamiento de layout para Gastos desktop.**
+  Analisis apila tendencia y distribucion en una columna; podrian convivir lado a lado. Historial es una lista plana sin navegacion por mes (ver T8).
+
 - [ ] **T8 · Paridad mobile de lo aplicado en desktop.**
   Quedó pendiente a propósito (se priorizó desktop). Falta en mobile: edición de cuotas + deshacer (F3), donut por `origen` y toggle monto/frecuencia (B5), gráfico de Ahorros con líneas de meta — hoy **mobile no tiene gráfico alguno en Ahorros** (F4).
 
