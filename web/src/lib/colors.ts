@@ -17,9 +17,19 @@ export const ORIGEN_LABEL: Record<string, string> = {
 }
 
 export const ORIGEN_FILL: Record<string, string> = {
+  'Directo':       '#64748b',
   'Cuotas':        '#eab308',
   'Suscripciones': '#ec4899',
 }
+
+/** Etiqueta del eje "tipo de gasto", que incluye lo registrado a mano. */
+export const TIPO_LABEL: Record<string, string> = {
+  manual:      'Directo',
+  cuota:       'Cuotas',
+  suscripcion: 'Suscripciones',
+}
+
+export const SIN_METODO = 'Sin declarar'
 
 export const EXTRA_COLORS = ['#14b8a6', '#6366f1', '#f43f5e', '#a3e635']
 

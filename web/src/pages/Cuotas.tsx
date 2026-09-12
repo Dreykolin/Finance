@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { CreditCard, ShoppingBag, Check, Trash2, Plus, Pencil, Minus } from 'lucide-react'
 import { useCuotas } from '../store/useCuotas'
 import Modal from '../components/Modal'
+import MetodoPicker from '../components/MetodoPicker'
 import { formatCLP, formatFecha } from '../lib/format'
 import type { CompraCuotas } from '../types'
 
@@ -170,6 +171,7 @@ export default function Cuotas() {
               />
               <p className="text-zinc-600 text-xs text-center">
                 Desde {formatFecha(selected.fechaInicio)} · {selected.cuotasPagadas}/{selected.cuotasTotales} cuotas
+                {selected.metodoPago && ` · ${selected.metodoPago}`}
               </p>
             </div>
 
@@ -279,6 +281,7 @@ function FormEditarCuota({
   const [cuotasTotales, setCuotasTotales] = useState(String(cuota.cuotasTotales))
   const [montoCuota, setMontoCuota]       = useState(String(cuota.montoCuota))
   const [cuotasPagadas, setCuotasPagadas] = useState(String(cuota.cuotasPagadas))
+  const [metodo, setMetodo]               = useState(cuota.metodoPago ?? '')
   const [error, setError]                 = useState<string | null>(null)
   const [guardando, setGuardando]         = useState(false)
 
@@ -300,6 +303,7 @@ function FormEditarCuota({
         cuotasTotales: totales,
         montoCuota: parseInt(montoCuota) || 0,
         cuotasPagadas: pagadas,
+        metodoPago: metodo,
       })
     } catch {
       setError('No se pudo guardar. Revisa los datos e intenta de nuevo.')
@@ -329,6 +333,11 @@ function FormEditarCuota({
           <input className={inputCls} type="number" min="0" value={montoCuota}
             onChange={e => setMontoCuota(e.target.value.replace(/\D/g, ''))} required />
         </div>
+      </div>
+
+      <div>
+        <label className={labelCls}>Con qué la pagas</label>
+        <MetodoPicker valor={metodo} onChange={setMetodo} opcional />
       </div>
 
       <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 flex flex-col gap-2">
@@ -380,6 +389,7 @@ function FormNuevaCompra({
   const [tienda, setTienda] = useState('')
   const [cuotasTotales, setCuotasTotales] = useState('')
   const [montoCuota, setMontoCuota] = useState('')
+  const [metodo, setMetodo] = useState('')
 
   const inputCls = "bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-accent transition-colors placeholder:text-zinc-600 w-full"
 
@@ -392,6 +402,7 @@ function FormNuevaCompra({
       cuotasPagadas: 0,
       montoCuota: parseInt(montoCuota),
       fechaInicio: new Date().toISOString().slice(0, 10),
+      metodoPago: metodo,
     })
   }
 
@@ -402,6 +413,12 @@ function FormNuevaCompra({
       <div className="grid grid-cols-2 gap-3">
         <input className={inputCls} type="number" placeholder="N° Cuotas" value={cuotasTotales} onChange={e => setCuotasTotales(e.target.value.replace(/\D/g,''))} min="1" required />
         <input className={inputCls} type="number" placeholder="Valor Cuota" value={montoCuota} onChange={e => setMontoCuota(e.target.value.replace(/\D/g,''))} min="0" required />
+      </div>
+      <div>
+        <p className="text-zinc-500 text-[10px] font-extrabold tracking-widest uppercase mb-2">
+          Con qué la pagas
+        </p>
+        <MetodoPicker valor={metodo} onChange={setMetodo} opcional />
       </div>
       <button
         type="submit"

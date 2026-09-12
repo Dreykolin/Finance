@@ -19,6 +19,8 @@ export interface CompraCuotas {
   cuotasPagadas: number;
   montoCuota: number;
   fechaInicio: string;
+  /** Medio con el que se paga cada cuota; lo heredan los gastos generados. */
+  metodoPago: string;
 }
 
 export interface Ahorro {
@@ -57,6 +59,8 @@ export interface Suscripcion {
   mesCobro: number | null;            // 1-12, solo si el ciclo es anual
   activa: boolean;
   desde: string;                      // 'YYYY-MM-DD'
+  /** Medio al que llega el cobro; lo heredan los gastos generados. */
+  metodoPago: string;
   cargos: CargoSuscripcion[];
   /** Derivado: ¿el cargo del período en curso está cobrado? (lo usa la vista móvil) */
   pagado: boolean;
@@ -65,4 +69,5 @@ export interface Suscripcion {
 /** Lo que el cliente envía al dar de alta un servicio. */
 export type NuevaSuscripcion = Pick<Suscripcion, 'nombre' | 'monto' | 'ciclo' | 'diaCobro'> & {
   mesCobro?: number | null;
+  metodoPago?: string;
 };

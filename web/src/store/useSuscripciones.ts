@@ -11,6 +11,7 @@ function mapSus(r: any): Suscripcion {
     diaCobro: r.dia_cobro ?? 1,
     mesCobro: r.mes_cobro ?? null,
     activa:   r.activa ?? true,
+    metodoPago: r.metodo_pago ?? '',
     desde:    (r.desde ?? '').slice(0, 10),
     cargos:   (r.cargos ?? []).map(mapCargo),
     pagado:   r.pagado ?? false,
@@ -45,6 +46,7 @@ export function useSuscripciones() {
       ciclo:     s.ciclo,
       dia_cobro: s.diaCobro,
       mes_cobro: s.mesCobro ?? null,
+      metodo_pago: s.metodoPago || null,
     })
     // Se recarga en vez de insertar en local: al crearla, el backend puede haber
     // materializado cargos vencidos (y sus gastos) en el mismo golpe.
@@ -59,6 +61,7 @@ export function useSuscripciones() {
       dia_cobro: patch.diaCobro,
       mes_cobro: patch.mesCobro,
       activa:    patch.activa,
+      metodo_pago: patch.metodoPago,
     })
     await cargar()
   }

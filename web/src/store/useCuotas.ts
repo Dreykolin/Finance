@@ -11,6 +11,7 @@ function mapCuota(r: any): CompraCuotas {
     cuotasPagadas: r.cuotas_pagadas,
     montoCuota:   r.monto_cuota,
     fechaInicio:  r.fecha,
+    metodoPago:   r.metodo_pago ?? '',
   }
 }
 
@@ -30,6 +31,7 @@ export function useCuotas() {
       cuotas_totales:  c.cuotasTotales,
       monto_cuota:     c.montoCuota,
       fecha:           c.fechaInicio,
+      metodo_pago:     c.metodoPago || null,
     })
     setCuotas(prev => [...prev, mapCuota(created)])
   }
@@ -50,6 +52,7 @@ export function useCuotas() {
       cuotas_totales:  c.cuotasTotales,
       monto_cuota:     c.montoCuota,
       cuotas_pagadas:  c.cuotasPagadas,
+      metodo_pago:     c.metodoPago,
     })
     setCuotas(prev => prev.map(x => x.id === id ? mapCuota(updated) : x))
   }

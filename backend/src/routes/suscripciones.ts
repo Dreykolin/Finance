@@ -24,6 +24,7 @@ export function fechaCobro(y: number, m: number, dia: number): string {
 export interface SubRow {
   id: number
   precio: number
+  metodo_pago?: string | null
   ciclo: string
   dia_cobro: number
   mes_cobro: number | null
@@ -71,7 +72,8 @@ export function periodosVencidos(s: SubRow, hasta: string): { periodo: string; f
  */
 async function materializarCargos(userId: number) {
   const { rows: subs } = await pool.query<SubRow>(
-    `SELECT id, precio, ciclo, dia_cobro, mes_cobro, TO_CHAR(desde, 'YYYY-MM-DD') AS desde
+    `SELECT id, precio, ciclo, dia_cobro, mes_cobro, metodo_pago,
+            TO_CHAR(desde, 'YYYY-MM-DD') AS desde
      FROM suscripciones WHERE id_usuario = $1 AND activa = TRUE`,
     [userId]
   )
@@ -103,9 +105,9 @@ async function materializarCargos(userId: number) {
     await client.query('BEGIN')
     for (const { sub, periodo, fecha } of pendientes) {
       const compra = await client.query(
-        `INSERT INTO compras (id_usuario, detalles, monto, fecha, origen, id_suscripcion)
-         VALUES ($1,$2,$3,$4,'suscripcion',$5) RETURNING id`,
-        [userId, nombreDe.get(sub.id), sub.precio, fecha, sub.id]
+        `INSERT INTO compras (id_usuario, detalles, monto, metodo_pago, fecha, origen, id_suscripcion)
+         VALUES ($1,$2,$3,$4,$5,'suscripcion',$6) RETURNING id`,
+        [userId, nombreDe.get(sub.id), sub.precio, sub.metodo_pago ?? null, fecha, sub.id]
       )
       await client.query(
         `INSERT INTO cargos_suscripciones (id_suscripcion, periodo, monto, estado, confirmado, fecha, id_compra)
@@ -130,7 +132,7 @@ router.get('/', async (req, res) => {
     await materializarCargos(req.user!.id)
 
     const { rows: subs } = await pool.query(
-      `SELECT id, nombre, precio, ciclo, dia_cobro, mes_cobro, activa,
+      `SELECT id, nombre, precio, ciclo, dia_cobro, mes_cobro, activa, metodo_pago,
               TO_CHAR(desde, 'YYYY-MM-DD') AS desde
        FROM suscripciones WHERE id_usuario = $1
        ORDER BY activa DESC, nombre ASC`,
@@ -160,7 +162,7 @@ router.get('/', async (req, res) => {
 })
 
 router.post('/', async (req, res) => {
-  const { nombre, precio, ciclo, dia_cobro, mes_cobro, desde } = req.body
+  const { nombre, precio, ciclo, dia_cobro, mes_cobro, desde, metodo_pago } = req.body
   if (!nombre || !precio) { res.status(400).json({ error: 'Faltan campos' }); return }
 
   const cicloFinal = ciclo === 'anual' ? 'anual' : 'mensual'
@@ -174,9 +176,9 @@ router.post('/', async (req, res) => {
   }
 
   const result = await pool.query(
-    `INSERT INTO suscripciones (id_usuario, nombre, precio, ciclo, dia_cobro, mes_cobro, desde, pagado)
-     VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7::date, CURRENT_DATE),FALSE) RETURNING *`,
-    [req.user!.id, nombre, precio, cicloFinal, dia, mes, desde ?? null]
+    `INSERT INTO suscripciones (id_usuario, nombre, precio, ciclo, dia_cobro, mes_cobro, desde, metodo_pago, pagado)
+     VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7::date, CURRENT_DATE),$8,FALSE) RETURNING *`,
+    [req.user!.id, nombre, precio, cicloFinal, dia, mes, desde ?? null, metodo_pago ?? null]
   )
   res.json({ ...result.rows[0], cargos: [] })
 })
@@ -194,6 +196,7 @@ router.patch('/:id', async (req, res) => {
   const ciclo  = req.body.ciclo === 'anual' ? 'anual' : (req.body.ciclo === 'mensual' ? 'mensual' : sus.ciclo)
   const dia    = Number(req.body.dia_cobro ?? sus.dia_cobro)
   const activa = req.body.activa ?? sus.activa
+  const metodo = req.body.metodo_pago !== undefined ? req.body.metodo_pago : sus.metodo_pago
   let mes: number | null = req.body.mes_cobro !== undefined ? Number(req.body.mes_cobro) : sus.mes_cobro
 
   if (!nombre) { res.status(400).json({ error: 'El nombre es obligatorio' }); return }
@@ -206,9 +209,10 @@ router.patch('/:id', async (req, res) => {
   }
 
   const updated = await pool.query(
-    `UPDATE suscripciones SET nombre=$1, precio=$2, ciclo=$3, dia_cobro=$4, mes_cobro=$5, activa=$6
-     WHERE id=$7 RETURNING *`,
-    [nombre, precio, ciclo, dia, mes, activa, sus.id]
+    `UPDATE suscripciones SET nombre=$1, precio=$2, ciclo=$3, dia_cobro=$4, mes_cobro=$5,
+            activa=$6, metodo_pago=$7
+     WHERE id=$8 RETURNING *`,
+    [nombre, precio, ciclo, dia, mes, activa, metodo ?? null, sus.id]
   )
   res.json(updated.rows[0])
 })
@@ -222,7 +226,7 @@ router.post('/:id/cargos/:periodo', async (req, res) => {
   const client = await pool.connect()
   try {
     const { rows } = await client.query(
-      `SELECT c.*, s.nombre, s.id_usuario
+      `SELECT c.*, s.nombre, s.id_usuario, s.metodo_pago
        FROM cargos_suscripciones c
        JOIN suscripciones s ON s.id = c.id_suscripcion
        WHERE c.id_suscripcion = $1 AND c.periodo = $2 AND s.id_usuario = $3`,
@@ -245,9 +249,9 @@ router.post('/:id/cargos/:periodo', async (req, res) => {
       )
     } else {
       const compra = await client.query(
-        `INSERT INTO compras (id_usuario, detalles, monto, fecha, origen, id_suscripcion)
-         VALUES ($1,$2,$3,$4,'suscripcion',$5) RETURNING id`,
-        [req.user!.id, cargo.nombre, cargo.monto, cargo.fecha, cargo.id_suscripcion]
+        `INSERT INTO compras (id_usuario, detalles, monto, metodo_pago, fecha, origen, id_suscripcion)
+         VALUES ($1,$2,$3,$4,$5,'suscripcion',$6) RETURNING id`,
+        [req.user!.id, cargo.nombre, cargo.monto, cargo.metodo_pago ?? null, cargo.fecha, cargo.id_suscripcion]
       )
       await client.query(
         `UPDATE cargos_suscripciones SET estado='cobrado', confirmado=TRUE, id_compra=$1 WHERE id=$2`,
@@ -310,9 +314,9 @@ router.post('/:id/toggle', async (req, res) => {
     try {
       await client.query('BEGIN')
       const compra = await client.query(
-        `INSERT INTO compras (id_usuario, detalles, monto, fecha, origen, id_suscripcion)
-         VALUES ($1,$2,$3,$4,'suscripcion',$5) RETURNING id`,
-        [req.user!.id, sus.nombre, sus.precio, hoyStr(), sus.id]
+        `INSERT INTO compras (id_usuario, detalles, monto, metodo_pago, fecha, origen, id_suscripcion)
+         VALUES ($1,$2,$3,$4,$5,'suscripcion',$6) RETURNING id`,
+        [req.user!.id, sus.nombre, sus.precio, sus.metodo_pago ?? null, hoyStr(), sus.id]
       )
       await client.query(
         `INSERT INTO cargos_suscripciones (id_suscripcion, periodo, monto, estado, confirmado, fecha, id_compra)
@@ -343,9 +347,9 @@ router.post('/:id/toggle', async (req, res) => {
     await client.query('BEGIN')
     if (pasaACobrado) {
       const compra = await client.query(
-        `INSERT INTO compras (id_usuario, detalles, monto, fecha, origen, id_suscripcion)
-         VALUES ($1,$2,$3,$4,'suscripcion',$5) RETURNING id`,
-        [req.user!.id, sus.nombre, actual.monto, actual.fecha, sus.id]
+        `INSERT INTO compras (id_usuario, detalles, monto, metodo_pago, fecha, origen, id_suscripcion)
+         VALUES ($1,$2,$3,$4,$5,'suscripcion',$6) RETURNING id`,
+        [req.user!.id, sus.nombre, actual.monto, sus.metodo_pago ?? null, actual.fecha, sus.id]
       )
       await client.query(
         `UPDATE cargos_suscripciones SET estado='cobrado', confirmado=TRUE, id_compra=$1 WHERE id=$2`,

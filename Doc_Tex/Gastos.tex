@@ -19,5 +19,11 @@ La pestaña de análisis está dedicada a la visualización de métricas financi
         \item \textbf{Frecuencia:} cuántos movimientos se registraron con cada una.
     \end{itemize}
 
-    Las categorías no son únicamente los métodos de pago. Los gastos generados de forma automática por los otros módulos carecen de método de pago declarado, ya que no corresponden a una decisión de pago del momento sino a un compromiso previamente contraído; por ello se agrupan en categorías propias (\textbf{Cuotas} y \textbf{Suscripciones}) según su \textit{origen}. Así el gráfico separa el gasto \textbf{discrecional} del \textbf{comprometido}, en lugar de acumular ambos bajo una etiqueta vacía. Los movimientos manuales sin método de pago quedan fuera del gráfico y se informan como nota al pie del mismo.
+El gráfico admite además \textbf{dos ejes de agrupación} distintos, ya que un mismo gasto responde a dos preguntas que no conviene mezclar:
+    \begin{itemize}
+        \item \textbf{Método:} con qué medio se pagó (efectivo, débito, crédito, transferencia).
+        \item \textbf{Tipo:} de dónde proviene el gasto (directo, cuotas o suscripciones).
+    \end{itemize}
+
+    Un cobro de un servicio cargado a la tarjeta de crédito es \textit{Crédito} en el primer eje y \textit{Suscripciones} en el segundo; agruparlos en una sola dimensión perdería ambas lecturas. Los movimientos cuyo medio de pago no se ha declarado se agrupan bajo una categoría propia y se informan al pie del gráfico.
 \end{enumerate}

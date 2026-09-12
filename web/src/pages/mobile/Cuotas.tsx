@@ -160,7 +160,7 @@ function FormCuota({ onSave }: { onSave: (c: Omit<CompraCuotas, 'id'>) => void }
   function submit(e: React.FormEvent) {
     e.preventDefault()
     if (!producto || !tienda || !cuotasTotales || !montoCuota) return
-    onSave({ producto, tienda, cuotasTotales: parseInt(cuotasTotales), cuotasPagadas: 0, montoCuota: parseInt(montoCuota), fechaInicio: new Date().toISOString().slice(0, 10) })
+    onSave({ producto, tienda, cuotasTotales: parseInt(cuotasTotales), cuotasPagadas: 0, montoCuota: parseInt(montoCuota), fechaInicio: new Date().toISOString().slice(0, 10), metodoPago: '' })
   }
 
   return (

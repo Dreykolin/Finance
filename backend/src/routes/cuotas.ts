@@ -14,13 +14,13 @@ router.get('/', async (req, res) => {
 })
 
 router.post('/', async (req, res) => {
-  const { nombre_producto, tienda, cuotas_totales, monto_cuota, fecha } = req.body
+  const { nombre_producto, tienda, cuotas_totales, monto_cuota, fecha, metodo_pago } = req.body
   if (!nombre_producto || !tienda || !cuotas_totales || !monto_cuota || !fecha) {
     res.status(400).json({ error: 'Faltan campos' }); return
   }
   const result = await pool.query(
-    'INSERT INTO cuotas (id_usuario, nombre_producto, tienda, cuotas_totales, cuotas_pagadas, monto_cuota, fecha) VALUES ($1,$2,$3,$4,0,$5,$6) RETURNING *',
-    [req.user!.id, nombre_producto, tienda, cuotas_totales, monto_cuota, fecha]
+    'INSERT INTO cuotas (id_usuario, nombre_producto, tienda, cuotas_totales, cuotas_pagadas, monto_cuota, fecha, metodo_pago) VALUES ($1,$2,$3,$4,0,$5,$6,$7) RETURNING *',
+    [req.user!.id, nombre_producto, tienda, cuotas_totales, monto_cuota, fecha, metodo_pago ?? null]
   )
   res.json(result.rows[0])
 })
@@ -46,8 +46,8 @@ router.post('/:id/marcar', async (req, res) => {
     await client.query('BEGIN')
     await client.query('UPDATE cuotas SET cuotas_pagadas = $1 WHERE id = $2', [nuevasPagadas, cuota.id])
     await client.query(
-      "INSERT INTO compras (id_usuario, detalles, monto, fecha, origen, id_cuota) VALUES ($1,$2,$3,$4,'cuota',$5)",
-      [req.user!.id, detalles, cuota.monto_cuota, fecha, cuota.id]
+      "INSERT INTO compras (id_usuario, detalles, monto, metodo_pago, fecha, origen, id_cuota) VALUES ($1,$2,$3,$4,$5,'cuota',$6)",
+      [req.user!.id, detalles, cuota.monto_cuota, cuota.metodo_pago ?? null, fecha, cuota.id]
     )
     await client.query('COMMIT')
   } catch (e) {
@@ -78,6 +78,7 @@ router.patch('/:id', async (req, res) => {
     const cuotas_totales  = Number(req.body.cuotas_totales  ?? cuota.cuotas_totales)
     const monto_cuota     = Number(req.body.monto_cuota     ?? cuota.monto_cuota)
     const cuotas_pagadas  = Number(req.body.cuotas_pagadas  ?? cuota.cuotas_pagadas)
+    const metodo_pago     = req.body.metodo_pago !== undefined ? req.body.metodo_pago : cuota.metodo_pago
 
     if (!nombre_producto || !tienda) {
       res.status(400).json({ error: 'Producto y tienda son obligatorios' }); return
@@ -100,9 +101,9 @@ router.patch('/:id', async (req, res) => {
     await client.query('BEGIN')
     await client.query(
       `UPDATE cuotas SET nombre_producto = $1, tienda = $2, cuotas_totales = $3,
-              monto_cuota = $4, cuotas_pagadas = $5
-       WHERE id = $6`,
-      [nombre_producto, tienda, cuotas_totales, monto_cuota, cuotas_pagadas, cuota.id]
+              monto_cuota = $4, cuotas_pagadas = $5, metodo_pago = $6
+       WHERE id = $7`,
+      [nombre_producto, tienda, cuotas_totales, monto_cuota, cuotas_pagadas, metodo_pago ?? null, cuota.id]
     )
     if (revertidas > 0) {
       await client.query(

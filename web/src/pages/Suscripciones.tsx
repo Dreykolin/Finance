@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import { useSuscripciones } from '../store/useSuscripciones'
 import Modal from '../components/Modal'
+import MetodoPicker from '../components/MetodoPicker'
 import { formatCLP } from '../lib/format'
 import type { Suscripcion, NuevaSuscripcion, CargoSuscripcion } from '../types'
 
@@ -209,6 +210,7 @@ export default function Suscripciones() {
                   {s.ciclo === 'anual'
                     ? `${s.diaCobro} ${MESES[(s.mesCobro ?? 1) - 1]} · ${formatCLP(s.monto)}/año`
                     : `día ${s.diaCobro} · ${formatCLP(s.monto)}/mes`}
+                  {s.metodoPago && ` · ${s.metodoPago}`}
                   {!s.activa && ' · de baja'}
                 </p>
               </div>
@@ -346,6 +348,7 @@ function FormSuscripcion({ inicial, onSave }: {
   const [ciclo, setCiclo]     = useState<'mensual' | 'anual'>(inicial?.ciclo ?? 'mensual')
   const [dia, setDia]         = useState(String(inicial?.diaCobro ?? 1))
   const [mes, setMes]         = useState(String(inicial?.mesCobro ?? new Date().getMonth() + 1))
+  const [metodo, setMetodo]   = useState(inicial?.metodoPago ?? '')
   const [guardando, setGuardando] = useState(false)
 
   const inputCls = "bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-accent transition-colors placeholder:text-zinc-600 w-full"
@@ -363,6 +366,7 @@ function FormSuscripcion({ inicial, onSave }: {
         ciclo,
         diaCobro: Math.min(Math.max(d, 1), 31),
         mesCobro: ciclo === 'anual' ? parseInt(mes) : null,
+        metodoPago: metodo,
       })
     } finally {
       setGuardando(false)
@@ -441,6 +445,11 @@ function FormSuscripcion({ inicial, onSave }: {
         <p className="text-zinc-600 text-xs mt-2">
           Si el día no existe en un mes (el 31 en febrero), el cobro se registra el último día.
         </p>
+      </div>
+
+      <div>
+        <label className={labelCls}>A dónde te lo cobran</label>
+        <MetodoPicker valor={metodo} onChange={setMetodo} opcional />
       </div>
 
       <button

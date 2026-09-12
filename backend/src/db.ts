@@ -65,6 +65,12 @@ export async function initDb() {
     ALTER TABLE compras ADD COLUMN IF NOT EXISTS id_suscripcion
       INTEGER REFERENCES suscripciones(id) ON DELETE SET NULL;
 
+    -- El medio de pago de un compromiso se declara una vez y lo heredan todos
+    -- los gastos que genera: la tarjeta con la que pagas un producto en cuotas
+    -- no cambia de una cuota a otra.
+    ALTER TABLE cuotas        ADD COLUMN IF NOT EXISTS metodo_pago TEXT;
+    ALTER TABLE suscripciones ADD COLUMN IF NOT EXISTS metodo_pago TEXT;
+
     -- ── Suscripciones: de un booleano sin tiempo a cargos por período ────────
     -- 'pagado' no sabía a qué mes correspondía y el reseteo manual borraba la
     -- historia. Ahora cada cobro es una fila con su período y su monto propio.

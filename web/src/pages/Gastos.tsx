@@ -10,7 +10,7 @@ import ChartContainer from '../components/ChartContainer'
 import Donut, { type DonutSlice } from '../components/Donut'
 import Modal from '../components/Modal'
 import { formatCLP, formatFecha, mesLabel } from '../lib/format'
-import { METODOS, ORIGEN_LABEL, colorFor } from '../lib/colors'
+import { METODOS, ORIGEN_LABEL, TIPO_LABEL, SIN_METODO, colorFor } from '../lib/colors'
 import type { Gasto, NuevoGasto } from '../types'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler)
@@ -180,11 +180,16 @@ function AnalisisTab({ gastos, presupuesto }: { gastos: Gasto[], presupuesto: nu
  */
 function DistribucionCard({ gastos }: { gastos: Gasto[] }) {
   const [modo, setModo] = useState<'monto' | 'frecuencia'>('monto')
+  const [eje, setEje]   = useState<'metodo' | 'tipo'>('metodo')
 
   const acc: Record<string, { monto: number; usos: number }> = {}
   gastos.forEach(g => {
-    const cat = ORIGEN_LABEL[g.origen] ?? g.metodoPago ?? ''
-    if (!cat) return // gasto manual sin método declarado: no clasificable
+    // Dos dimensiones distintas sobre el mismo gasto: con qué se pagó, y de
+    // dónde vino. Un cargo de Netflix a la tarjeta de crédito es "Crédito" en un
+    // eje y "Suscripciones" en el otro; mezclarlas en uno solo pierde ambas.
+    const cat = eje === 'tipo'
+      ? (TIPO_LABEL[g.origen] ?? TIPO_LABEL.manual)
+      : (g.metodoPago || SIN_METODO)
     acc[cat] ??= { monto: 0, usos: 0 }
     acc[cat].monto += g.monto
     acc[cat].usos  += 1
@@ -193,40 +198,55 @@ function DistribucionCard({ gastos }: { gastos: Gasto[] }) {
   const slices: DonutSlice[] = Object.entries(acc)
     .map(([label, v]) => ({ label, value: modo === 'monto' ? v.monto : v.usos }))
     .sort((a, b) => b.value - a.value)
-    .map((s, i) => ({ ...s, color: colorFor(s.label, i) }))
+    .map((s, i) => ({
+      ...s,
+      color: s.label === SIN_METODO ? '#3f3f46' : colorFor(s.label, i),
+    }))
 
-  const sinClasificar = gastos.filter(g => !ORIGEN_LABEL[g.origen] && !g.metodoPago).length
+  const sinDeclarar = gastos.filter(g => !g.metodoPago).length
+
+  const Toggle = <T extends string>(
+    { valor, opciones, onChange }: { valor: T; opciones: readonly T[]; onChange: (v: T) => void }
+  ) => (
+    <div className="flex bg-zinc-950 border border-zinc-800 rounded-lg p-0.5">
+      {opciones.map(o => (
+        <button
+          key={o}
+          onClick={() => onChange(o)}
+          className={`px-2.5 py-1 rounded-md text-[11px] font-bold capitalize transition-colors ${
+            valor === o ? 'bg-accent text-white' : 'text-zinc-500 hover:text-zinc-300'
+          }`}
+        >
+          {o === 'metodo' ? 'método' : o}
+        </button>
+      ))}
+    </div>
+  )
 
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-2xl py-5">
-      <div className="flex items-center justify-between px-5 mb-4 gap-3">
+      <div className="flex items-center justify-between px-5 mb-2 gap-3 flex-wrap">
         <p className="text-zinc-500 text-[10px] font-extrabold tracking-widest uppercase">
           Distribución del Gasto
         </p>
-        <div className="flex bg-zinc-950 border border-zinc-800 rounded-lg p-0.5">
-          {(['monto', 'frecuencia'] as const).map(m => (
-            <button
-              key={m}
-              onClick={() => setModo(m)}
-              className={`px-2.5 py-1 rounded-md text-[11px] font-bold capitalize transition-colors ${
-                modo === m ? 'bg-accent text-white' : 'text-zinc-500 hover:text-zinc-300'
-              }`}
-            >
-              {m}
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          <Toggle valor={eje} opciones={['metodo', 'tipo'] as const} onChange={setEje} />
+          <Toggle valor={modo} opciones={['monto', 'frecuencia'] as const} onChange={setModo} />
         </div>
       </div>
+      <p className="text-zinc-600 text-xs px-5 mb-4">
+        {eje === 'metodo' ? 'Con qué pagas' : 'De dónde viene el gasto'}
+      </p>
       <div className="px-5">
         <Donut
           slices={slices}
           label={modo === 'monto' ? 'del total' : 'de los usos'}
           formatValue={v => modo === 'monto' ? formatCLP(v) : `${v} ${v === 1 ? 'uso' : 'usos'}`}
         />
-        {sinClasificar > 0 && (
+        {eje === 'metodo' && sinDeclarar > 0 && (
           <p className="text-zinc-600 text-xs mt-4">
-            {sinClasificar} {sinClasificar === 1 ? 'movimiento' : 'movimientos'} sin método de pago
-            {' '}{sinClasificar === 1 ? 'quedó' : 'quedaron'} fuera del gráfico.
+            {sinDeclarar} {sinDeclarar === 1 ? 'movimiento' : 'movimientos'} sin método declarado.
+            Puedes fijarlo en la cuota o suscripción que lo genera.
           </p>
         )}
       </div>

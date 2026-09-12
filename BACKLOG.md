@@ -119,6 +119,25 @@ _(ideas sin clasificar — van llegando acá)_
   Solo admiten alta y baja: corregir un gasto exige borrarlo y recrearlo.
   Cuotas y suscripciones ya tienen edición.
 
+- [x] **F9 · Medio de pago en cuotas y suscripciones.**
+  El medio es propiedad del compromiso, no del momento: se declara una vez (opcional) y
+  lo heredan todos los gastos que genera. Desbloquea saber cuánto del cupo de cada tarjeta
+  está comprometido antes de gastar. El donut pasó a tener dos ejes — **método** (con qué pagas)
+  y **tipo** (directo / cuotas / suscripciones) — porque son dimensiones ortogonales.
+  *Hecho 2026-09-12 — escritorio; el alta móvil lo deja sin declarar.*
+
+- [ ] **F10 · Cuentas y tarjetas concretas, no solo el tipo.**
+  Hoy el medio es una categoría genérica ("Crédito"). Si tienes dos tarjetas de crédito,
+  la app no las distingue, y el cupo comprometido es por tarjeta, no por tipo. Implicaría
+  una tabla de cuentas con cupo y fecha de facturación. Es el paso natural después de F9,
+  y también el que acerca a F5 (ingresos) la idea de saldo real.
+
+- [ ] **F11 · Cuotas de casa comercial como medio propio.**
+  La lista actual (efectivo, débito, crédito, transferencia) no cubre el crédito de retail
+  (CMR, Ripley, Líder), que en Chile es un medio distinto del crédito bancario y muy común
+  justamente en compras en cuotas. No lo agregué por mi cuenta: cambia el vocabulario
+  compartido con el formulario de gastos.
+
 - [ ] **F8 . Recordatorio de cobros proximos.**
   Ya existe el dato (dia de cobro): falta avisar antes de que ocurra. Hoy el carril solo se mira si entras.
 
