@@ -6,6 +6,7 @@ import {
 import { useSuscripciones } from '../store/useSuscripciones'
 import Modal from '../components/Modal'
 import MetodoPicker from '../components/MetodoPicker'
+import StatTile from '../components/StatTile'
 import { formatCLP } from '../lib/format'
 import type { Suscripcion, NuevaSuscripcion, CargoSuscripcion } from '../types'
 
@@ -80,6 +81,61 @@ function Celda({ estado, onClick, title }: {
   )
 }
 
+/**
+ * Lo que un carril mensual no deja ver: el acumulado. Un servicio de $9.900 no
+ * impresiona hasta que se suman los veinte meses que llevas pagándolo, y ese es
+ * justo el número que decide si sigue valiendo la pena.
+ */
+function ResumenSuscripciones({ suscripciones, mensual, anual, porRevisar }: {
+  suscripciones: Suscripcion[]
+  mensual: number
+  anual: number
+  porRevisar: number
+}) {
+  const cobros = suscripciones.flatMap(s =>
+    s.cargos.filter(c => c.estado === 'cobrado').map(c => ({ nombre: s.nombre, monto: c.monto })))
+  const acumulado = cobros.reduce((t, c) => t + c.monto, 0)
+
+  const porServicio: Record<string, number> = {}
+  cobros.forEach(c => { porServicio[c.nombre] = (porServicio[c.nombre] ?? 0) + c.monto })
+  const mayor = Object.entries(porServicio).sort(([, a], [, b]) => b - a)[0]
+
+  // Coste anual real: doce meses de lo mensual más lo que se cobra una vez al año.
+  const anualizado = mensual * 12 + anual
+
+  return (
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <StatTile
+        etiqueta="Compromiso mensual"
+        valor={formatCLP(mensual)}
+        nota={anual > 0
+          ? `+ ${formatCLP(Math.round(anual / 12))}/mes prorrateado de lo anual`
+          : undefined}
+        acento
+      />
+      <StatTile
+        etiqueta="Costo al año"
+        valor={formatCLP(anualizado)}
+        nota="Lo que suman tus servicios en doce meses"
+      />
+      <StatTile
+        etiqueta="Pagado hasta hoy"
+        valor={formatCLP(acumulado)}
+        nota={mayor
+          ? `${mayor[0]} lidera con ${formatCLP(mayor[1])}`
+          : 'Sin cobros registrados aún'}
+      />
+      <StatTile
+        etiqueta="Por revisar"
+        valor={String(porRevisar)}
+        nota={porRevisar > 0
+          ? 'Cobros que la app dio por hechos'
+          : 'Todo confirmado'}
+      />
+    </div>
+  )
+}
+
 export default function Suscripciones() {
   const {
     suscripciones, agregar, editar, eliminar, alternarCargo, confirmarCargo,
@@ -123,29 +179,12 @@ export default function Suscripciones() {
       </div>
 
       <div className="px-5 flex flex-col gap-5">
-        {/* Resumen */}
-        <div className="grid grid-cols-3 gap-3">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
-            <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-wider mb-1">Compromiso mensual</p>
-            <p className="text-white font-bold text-lg">{formatCLP(mensual)}</p>
-          </div>
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
-            <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-wider mb-1">Anual</p>
-            <p className="text-white font-bold text-lg">{formatCLP(anual)}</p>
-            {anual > 0 && (
-              <p className="text-zinc-600 text-xs mt-0.5">{formatCLP(Math.round(anual / 12))}/mes prorrateado</p>
-            )}
-          </div>
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
-            <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-wider mb-1">Por revisar</p>
-            <p className={`font-bold text-lg ${porRevisar > 0 ? 'text-yellow-400' : 'text-zinc-600'}`}>
-              {porRevisar}
-            </p>
-            {porRevisar > 0 && (
-              <p className="text-zinc-600 text-xs mt-0.5">cobros dados por hechos</p>
-            )}
-          </div>
-        </div>
+        <ResumenSuscripciones
+          suscripciones={suscripciones}
+          mensual={mensual}
+          anual={anual}
+          porRevisar={porRevisar}
+        />
 
         {/* Carril */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">

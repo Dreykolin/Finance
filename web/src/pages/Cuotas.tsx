@@ -3,6 +3,8 @@ import { CreditCard, ShoppingBag, Check, Trash2, Plus, Pencil, Minus } from 'luc
 import { useCuotas } from '../store/useCuotas'
 import Modal from '../components/Modal'
 import MetodoPicker from '../components/MetodoPicker'
+import StatTile from '../components/StatTile'
+import ColumnasMensuales, { type PuntoMes } from '../components/ColumnasMensuales'
 import { formatCLP, formatFecha } from '../lib/format'
 import type { CompraCuotas } from '../types'
 
@@ -55,6 +57,94 @@ function ResumenRow({ label, value, highlight = false }: { label: string; value:
   )
 }
 
+const MESES_CORTOS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+
+/**
+ * Cuánto se paga en cuotas cada mes de aquí en adelante. Un producto con tres
+ * cuotas pendientes aporta su valor a los tres próximos meses y luego desaparece,
+ * así que la serie solo puede bajar: cada escalón es una deuda que termina.
+ */
+function cargaFutura(cuotas: CompraCuotas[], meses = 12): PuntoMes[] {
+  const hoy = new Date()
+  const out: PuntoMes[] = []
+
+  for (let i = 0; i < meses; i++) {
+    const d = new Date(hoy.getFullYear(), hoy.getMonth() + i, 1)
+    const vivas = cuotas.filter(c => c.cuotasTotales - c.cuotasPagadas > i)
+    const valor = vivas.reduce((t, c) => t + c.montoCuota, 0)
+    out.push({
+      clave: `${d.getFullYear()}-${d.getMonth() + 1}`,
+      etiqueta: MESES_CORTOS[d.getMonth()],
+      valor,
+      detalle: vivas.length === 0
+        ? 'sin cuotas'
+        : `${vivas.length} ${vivas.length === 1 ? 'producto' : 'productos'}`,
+      tenue: i > 0,
+    })
+  }
+  return out
+}
+
+/** El primer mes en que la carga baja, y cuánto se libera. */
+function proximaLiberacion(cuotas: CompraCuotas[]) {
+  const serie = cargaFutura(cuotas, 24)
+  for (let i = 1; i < serie.length; i++) {
+    if (serie[i].valor < serie[i - 1].valor) {
+      return { mes: serie[i].etiqueta, monto: serie[i - 1].valor - serie[i].valor, indice: i }
+    }
+  }
+  return null
+}
+
+function ResumenCuotas({ cuotas }: { cuotas: CompraCuotas[] }) {
+  const activas = cuotas.filter(c => c.cuotasPagadas < c.cuotasTotales)
+  const carga = activas.reduce((t, c) => t + c.montoCuota, 0)
+  const pendiente = cuotas.reduce(
+    (t, c) => t + (c.cuotasTotales - c.cuotasPagadas) * c.montoCuota, 0)
+
+  // Cuántos meses hasta la última cuota del producto más largo.
+  const mesesRestantes = activas.reduce(
+    (max, c) => Math.max(max, c.cuotasTotales - c.cuotasPagadas), 0)
+
+  const liberacion = proximaLiberacion(cuotas)
+  const finMes = new Date()
+  finMes.setMonth(finMes.getMonth() + mesesRestantes)
+
+  return (
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <StatTile
+        etiqueta="Carga mensual"
+        valor={formatCLP(carga)}
+        nota={activas.length > 0
+          ? `${activas.length} ${activas.length === 1 ? 'producto activo' : 'productos activos'}`
+          : 'Sin cuotas activas'}
+        acento
+      />
+      <StatTile
+        etiqueta="Deuda pendiente"
+        valor={formatCLP(pendiente)}
+        nota="Total que falta por pagar"
+      />
+      <StatTile
+        etiqueta="Próxima liberación"
+        valor={liberacion ? `+${formatCLP(liberacion.monto)}` : '—'}
+        nota={liberacion
+          ? `En ${liberacion.mes} baja tu carga mensual`
+          : 'Sin cambios en dos años'}
+      />
+      <StatTile
+        etiqueta="Libre de cuotas"
+        valor={mesesRestantes > 0
+          ? `${MESES_CORTOS[finMes.getMonth()]} ${String(finMes.getFullYear()).slice(2)}`
+          : 'Ahora'}
+        nota={mesesRestantes > 0
+          ? `Faltan ${mesesRestantes} ${mesesRestantes === 1 ? 'mes' : 'meses'}`
+          : 'No debes cuotas'}
+      />
+    </div>
+  )
+}
+
 export default function Cuotas() {
   const { cuotas, agregar, editar, eliminar, marcarCuota } = useCuotas()
 
@@ -98,6 +188,30 @@ export default function Cuotas() {
       </div>
 
       <div className="h-px bg-zinc-800 mx-5 mb-5" />
+
+      {cuotas.length > 0 && (
+        <div className="px-5 mb-5 flex flex-col gap-5">
+          <ResumenCuotas cuotas={cuotas} />
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl py-5">
+            <div className="px-5 mb-1">
+              <p className="text-zinc-500 text-[10px] font-extrabold tracking-widest uppercase">
+                Carga mensual proyectada
+              </p>
+              <p className="text-zinc-600 text-xs mt-1">
+                Lo que pagarás cada mes si no tomas nuevas cuotas. Cada escalón hacia
+                abajo es un producto que terminas.
+              </p>
+            </div>
+            <div className="px-2 mt-3">
+              <ColumnasMensuales
+                puntos={cargaFutura(cuotas)}
+                formatear={formatCLP}
+                notaVacio="No te quedan cuotas por pagar."
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Product list */}
       <div className="px-5 flex flex-col gap-4">

@@ -41,6 +41,35 @@ _(ideas sin clasificar — van llegando acá)_
   **Ojo:** los pagos marcados *antes* de este cambio no tienen el vínculo, así que no se pueden revertir automáticamente. Quedan como huérfanos históricos.
   *Hecho 2026-09-12.*
 
+- [x] **B7 · Gasto duplicado al materializar cargos (condición de carrera).**
+  La compra se insertaba *antes* que el cargo. Si el cargo chocaba con su UNIQUE
+  (dos peticiones a la vez: StrictMode en desarrollo, o dos pestañas), la compra quedaba
+  igual y aparecía un gasto duplicado sin cargo detrás. Ahora el cargo va primero y su
+  UNIQUE arbitra: si otra petición ya lo creó, esta no inserta nada.
+  *Hecho 2026-09-12.*
+
+- [x] **B8 · Reactivar una suscripción inventaba los meses de baja.**
+  `desde` no se movía, así que al reactivar se materializaban todos los cargos del período
+  inactivo, con sus gastos — justo lo que dar de baja venía a evitar. Ahora reactivar
+  mueve `desde` a la fecha actual.
+  *Hecho 2026-09-12.*
+
+- [x] **B9 · Borrar un gasto no avisaba a su origen.**
+  `DELETE /compras/:id` era ciego: la cuota seguía contando el pago (3/12 con solo dos
+  gastos) y el cargo seguía en 'cobrado' con `id_compra` en NULL. Ahora borrar un gasto
+  auto-generado revierte su origen, y el diálogo lo explica antes de confirmar.
+  *Hecho 2026-09-12.*
+
+- [ ] **B10 · Cambiar el ciclo de una suscripción deja cargos incoherentes.**
+  Al pasar de mensual a anual, los cargos mensuales anteriores siguen ahí y el carril los
+  muestra en meses que ya "no aplican". No corrompe datos, pero se lee raro. Falta decidir
+  si el cambio de ciclo debe limpiar el futuro, o si el historial viejo es legítimo
+  (el servicio *sí* se cobraba así antes).
+
+- [ ] **B11 · El toggle móvil fecha el cargo el día que lo tocas.**
+  Usa la fecha de hoy en vez de la fecha de cobro del período, así que el gasto puede
+  quedar con un día que no corresponde. Solo afecta a la vista móvil.
+
 ---
 
 ## T — Técnico / deuda
@@ -107,6 +136,29 @@ _(ideas sin clasificar — van llegando acá)_
 - [x] **F4 · Múltiples líneas de meta en el gráfico de Ahorros.**
   Una línea por meta pendiente, ordenadas por cercanía, con color y leyenda propios; el eje Y se estira para que la meta más alta entre en el área visible. La tarjeta de saldo muestra la brecha explícita hacia la próxima meta.
   *Hecho 2026-09-12 — desktop.*
+
+- [x] **F12 · Métricas y gráficos en los cuatro módulos.**
+  Fila de indicadores en cada pantalla y un gráfico nuevo en Cuotas (carga mensual
+  proyectada a 12 meses: cada escalón hacia abajo es una deuda que termina).
+  Gastos: gastado, proyección de cierre, comprometido, promedio de meses cerrados.
+  Ahorros: ritmo mensual y plazo estimado a la próxima meta.
+  Suscripciones: costo anualizado y acumulado histórico por servicio.
+  *Hecho 2026-09-12 — escritorio.*
+
+- [x] **F13 · Paleta de datos corregida y verificada.**
+  El verificador de visión cromática encontró que **Crédito y Débito eran casi
+  indistinguibles** (ΔE 1.3 con daltonismo deutan; 12.0 con visión normal, bajo el
+  piso de 15) — justo la distinción que el módulo existe para mostrar. Paleta nueva
+  verificada sobre la superficie oscura, y los segmentos del donut pasaron a **orden
+  canónico fijo**: ordenarlos por magnitud volvía variable qué colores quedaban
+  contiguos y anulaba la garantía de separación.
+  *Hecho 2026-09-12.*
+
+- [ ] **T15 · Nada de esto se ha visto renderizado.**
+  Verificado: tipos, build, geometría de los gráficos en sus límites (1 a 12 columnas,
+  colisión de etiquetas, desbordes) y la paleta con el verificador. **No verificado:**
+  cómo se ve de verdad en pantalla. Falta levantar la app contra la base y recorrer
+  las cuatro pantallas.
 
 - [ ] **F5 · Ingresos en el modelo.**
   Sin ingreso, la app no puede decir si el mes cierra bien: solo compara contra un límite que el usuario inventó. Habilita disponible real = ingreso − comprometido − variable − ahorro. Es la brecha estructural del producto.

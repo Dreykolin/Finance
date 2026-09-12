@@ -8,6 +8,7 @@ import { Line } from 'react-chartjs-2'
 import { useAhorros, useMetas } from '../store/useAhorros'
 import ChartContainer from '../components/ChartContainer'
 import Modal from '../components/Modal'
+import StatTile from '../components/StatTile'
 import { formatCLP, formatFecha, mesLabel } from '../lib/format'
 import type { Ahorro, MetaAhorro } from '../types'
 
@@ -21,6 +22,77 @@ const META_COLORS = [
   'rgba(244,114,182,0.7)',
   'rgba(148,163,184,0.65)',
 ]
+
+/**
+ * Ritmo y plazo. El saldo por sí solo no dice si vas bien: lo que orienta es a
+ * qué velocidad crece y cuándo, a esa velocidad, llegas a lo que te propusiste.
+ */
+function ResumenAhorros({ ahorros, total, proximaMeta, metasActivas }: {
+  ahorros: Ahorro[]
+  total: number
+  proximaMeta: MetaAhorro | null
+  metasActivas: number
+}) {
+  // Ritmo: neto por mes sobre los meses con movimiento. Usar meses corridos
+  // castigaría a quien ahorra en tandas en vez de todos los meses.
+  const porMes: Record<string, number> = {}
+  ahorros.forEach(a => {
+    const m = a.fecha.slice(0, 7)
+    porMes[m] = (porMes[m] ?? 0) + (a.esRetiro ? -a.monto : a.monto)
+  })
+  const meses = Object.values(porMes)
+  const ritmo = meses.length > 0
+    ? Math.round(meses.reduce((x, y) => x + y, 0) / meses.length)
+    : 0
+
+  const depositado = ahorros.filter(a => !a.esRetiro).reduce((t, a) => t + a.monto, 0)
+  const retirado   = ahorros.filter(a => a.esRetiro).reduce((t, a) => t + a.monto, 0)
+
+  const falta = proximaMeta ? proximaMeta.montoObjetivo - total : 0
+  const mesesParaMeta = proximaMeta && falta > 0 && ritmo > 0
+    ? Math.ceil(falta / ritmo)
+    : null
+
+  return (
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <StatTile
+        etiqueta="Total ahorrado"
+        valor={formatCLP(total)}
+        nota={retirado > 0 ? `${formatCLP(retirado)} retirados en total` : undefined}
+        acento={total >= 0}
+      />
+
+      <StatTile
+        etiqueta="Ritmo mensual"
+        valor={ritmo !== 0 ? `${ritmo > 0 ? '+' : ''}${formatCLP(ritmo)}` : '—'}
+        nota={meses.length > 0
+          ? `Promedio de ${meses.length} ${meses.length === 1 ? 'mes' : 'meses'} con movimiento`
+          : 'Sin movimientos todavía'}
+      />
+
+      <StatTile
+        etiqueta={proximaMeta ? `Para "${proximaMeta.nombre}"` : 'Próxima meta'}
+        valor={!proximaMeta ? '—' : falta <= 0 ? '¡Alcanzada!' : formatCLP(falta)}
+        medidor={proximaMeta && proximaMeta.montoObjetivo > 0
+          ? { pct: total / proximaMeta.montoObjetivo, limite: formatCLP(proximaMeta.montoObjetivo) }
+          : undefined}
+        nota={!proximaMeta ? 'Define una meta para seguir tu avance' : undefined}
+      />
+
+      <StatTile
+        etiqueta="A este ritmo"
+        valor={mesesParaMeta !== null
+          ? `${mesesParaMeta} ${mesesParaMeta === 1 ? 'mes' : 'meses'}`
+          : proximaMeta && falta <= 0 ? 'Cumplida' : '—'}
+        nota={mesesParaMeta !== null
+          ? `Hasta alcanzar "${proximaMeta!.nombre}"`
+          : ritmo <= 0 && proximaMeta
+            ? 'Tu ritmo actual no acerca la meta'
+            : `${depositado > 0 ? formatCLP(depositado) + ' depositados' : 'Sin depósitos'}`}
+      />
+    </div>
+  )
+}
 
 export default function Ahorros() {
   const { ahorros, agregar: agregarAhorro, eliminar: eliminarAhorro } = useAhorros()
@@ -142,30 +214,12 @@ export default function Ahorros() {
         */}
       <div className="px-5 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-5 items-start">
         <div className="flex flex-col gap-5 xl:sticky xl:top-5">
-        {/* Total card */}
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 flex items-center justify-between">
-          <div>
-            <p className="text-zinc-500 text-xs font-bold uppercase tracking-wider">Total Ahorrado</p>
-            <p className={`text-2xl font-extrabold mt-1 ${totalActual >= 0 ? 'text-white' : 'text-red-400'}`}>
-              {formatCLP(totalActual)}
-            </p>
-          </div>
-          {proximaMeta && (
-            <div className="text-right">
-              <p className="text-zinc-600 text-xs">
-                Próxima meta{metasActivas.length > 1 ? ` · ${metasActivas.length} activas` : ''}
-              </p>
-              <p className="text-emerald-500 text-sm font-bold mt-0.5">{proximaMeta.nombre}</p>
-              {totalActual >= proximaMeta.montoObjetivo ? (
-                <p className="text-emerald-400 text-xs font-bold">¡Alcanzada!</p>
-              ) : (
-                <p className="text-zinc-500 text-xs">
-                  faltan {formatCLP(proximaMeta.montoObjetivo - totalActual)}
-                </p>
-              )}
-            </div>
-          )}
-        </div>
+        <ResumenAhorros
+          ahorros={ahorros}
+          total={totalActual}
+          proximaMeta={proximaMeta}
+          metasActivas={metasActivas.length}
+        />
 
         {/* Chart */}
         {ahorros.length > 0 ? (

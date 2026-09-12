@@ -10,7 +10,8 @@ import ChartContainer from '../components/ChartContainer'
 import Donut, { type DonutSlice } from '../components/Donut'
 import Modal from '../components/Modal'
 import { formatCLP, formatFecha, mesLabel } from '../lib/format'
-import { METODOS, ORIGEN_LABEL, TIPO_LABEL, SIN_METODO, colorFor } from '../lib/colors'
+import StatTile from '../components/StatTile'
+import { METODOS, TIPO_LABEL, TIPOS, SIN_METODO, colorFor, ordenCanonico } from '../lib/colors'
 import type { Gasto, NuevoGasto } from '../types'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler)
@@ -64,6 +65,10 @@ export default function Gastos() {
         * Las pestañas Análisis/Historial eran una concesión al ancho del móvil;
         * en escritorio las dos vistas caben simultáneamente.
         */}
+      <div className="px-5 pb-5">
+        <ResumenMes gastos={gastos} presupuesto={presupuesto} />
+      </div>
+
       <div className="px-5 pb-5 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-5 items-start">
         <div className="flex flex-col gap-5 xl:sticky xl:top-5">
           <AnalisisTab gastos={gastos} presupuesto={presupuesto} />
@@ -169,6 +174,101 @@ function AnalisisTab({ gastos, presupuesto }: { gastos: Gasto[], presupuesto: nu
 }
 
 /**
+ * Los cuatro números con los que se abre el mes. Van como fichas y no como
+ * gráfico: para un valor único un gráfico de una sola barra no aporta nada que
+ * la cifra no diga mejor.
+ */
+function ResumenMes({ gastos, presupuesto }: { gastos: Gasto[]; presupuesto: number }) {
+  const hoy = new Date()
+  const clave = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  const mesActual   = clave(hoy)
+  const mesAnterior = clave(new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1))
+
+  const suma = (xs: Gasto[]) => xs.reduce((t, g) => t + g.monto, 0)
+  const delMes    = gastos.filter(g => g.fecha.startsWith(mesActual))
+  const totalMes  = suma(delMes)
+  const totalPrev = suma(gastos.filter(g => g.fecha.startsWith(mesAnterior)))
+
+  // Proyección lineal: a este ritmo diario, cómo cierra el mes. Solo tiene
+  // sentido con unos días corridos; antes de eso el ritmo es puro ruido.
+  const diaDeHoy = hoy.getDate()
+  const diasMes  = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate()
+  const proyeccion = diaDeHoy >= 3 ? Math.round(totalMes / diaDeHoy * diasMes) : null
+
+  const comprometido = suma(delMes.filter(g => g.origen !== 'manual'))
+  const pctComprometido = totalMes > 0 ? Math.round(comprometido / totalMes * 100) : 0
+
+  // El promedio excluye el mes en curso, que está a medias y lo hundiría.
+  const porMes: Record<string, number> = {}
+  gastos.forEach(g => {
+    const m = g.fecha.slice(0, 7)
+    if (m !== mesActual) porMes[m] = (porMes[m] ?? 0) + g.monto
+  })
+  const cerrados = Object.values(porMes)
+  const promedio = cerrados.length > 0
+    ? Math.round(cerrados.reduce((a, b) => a + b, 0) / cerrados.length)
+    : 0
+
+  const deltaPct = totalPrev > 0 ? (totalMes - totalPrev) / totalPrev * 100 : 0
+
+  return (
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <StatTile
+        etiqueta="Gastado este mes"
+        valor={formatCLP(totalMes)}
+        delta={totalPrev > 0 ? { pct: deltaPct, respecto: 'vs. mes anterior' } : undefined}
+        medidor={presupuesto > 0
+          ? { pct: totalMes / presupuesto, limite: formatCLP(presupuesto) }
+          : undefined}
+        nota={presupuesto === 0 ? 'Fija un presupuesto para ver el avance' : undefined}
+      />
+
+      <StatTile
+        etiqueta="Proyección de cierre"
+        valor={proyeccion !== null ? formatCLP(proyeccion) : '—'}
+        nota={proyeccion === null
+          ? 'Disponible tras unos días del mes'
+          : presupuesto > 0 && proyeccion > presupuesto
+            ? `Te pasarías por ${formatCLP(proyeccion - presupuesto)}`
+            : `A tu ritmo de estos ${diaDeHoy} días`}
+      />
+
+      <StatTile
+        etiqueta="Comprometido"
+        valor={formatCLP(comprometido)}
+        nota={totalMes > 0
+          ? `${pctComprometido}% del mes en cuotas y suscripciones`
+          : 'Cuotas y suscripciones del mes'}
+      />
+
+      <StatTile
+        etiqueta="Promedio mensual"
+        valor={promedio > 0 ? formatCLP(promedio) : '—'}
+        nota={cerrados.length > 0
+          ? `Sobre ${cerrados.length} ${cerrados.length === 1 ? 'mes cerrado' : 'meses cerrados'}`
+          : 'Aún no hay un mes completo'}
+      />
+    </div>
+  )
+}
+
+/**
+ * Borrar un gasto auto-generado no es solo quitarlo del historial: revierte el
+ * pago en el módulo que lo creó. Conviene decirlo antes, no después.
+ */
+function avisoBorrado(gastos: Gasto[], id: number | null): string {
+  const g = gastos.find(x => x.id === id)
+  if (!g) return 'Esta acción no se puede deshacer.'
+  if (g.origen === 'cuota') {
+    return 'Este gasto lo generó una cuota. Al borrarlo se descontará esa cuota del producto, como si el pago no hubiera ocurrido.'
+  }
+  if (g.origen === 'suscripcion') {
+    return 'Este gasto lo generó una suscripción. Al borrarlo, ese mes quedará marcado como no cobrado en su carril.'
+  }
+  return 'Esta acción no se puede deshacer.'
+}
+
+/**
  * Distribución del gasto por categoría de pago.
  *
  * Las compras auto-generadas (marcar una cuota, pagar una suscripción) se insertan
@@ -195,13 +295,15 @@ function DistribucionCard({ gastos }: { gastos: Gasto[] }) {
     acc[cat].usos  += 1
   })
 
-  const slices: DonutSlice[] = Object.entries(acc)
-    .map(([label, v]) => ({ label, value: modo === 'monto' ? v.monto : v.usos }))
-    .sort((a, b) => b.value - a.value)
-    .map((s, i) => ({
-      ...s,
-      color: s.label === SIN_METODO ? '#3f3f46' : colorFor(s.label, i),
-    }))
+  // Orden canónico, no por magnitud: la paleta está verificada sobre pares
+  // adyacentes, así que reordenar los segmentos según los datos rompería la
+  // separación garantizada entre colores vecinos.
+  const orden = eje === 'tipo' ? TIPOS : METODOS
+  const slices: DonutSlice[] = ordenCanonico(Object.keys(acc), orden).map(label => ({
+    label,
+    value: modo === 'monto' ? acc[label].monto : acc[label].usos,
+    color: colorFor(label),
+  }))
 
   const sinDeclarar = gastos.filter(g => !g.metodoPago).length
 
@@ -315,7 +417,7 @@ function HistorialTab({
       <Modal open={confirmId !== null} onClose={() => setConfirmId(null)}>
         <div className="flex flex-col gap-4">
           <h2 className="font-bold text-base">¿Eliminar gasto?</h2>
-          <p className="text-zinc-400 text-sm">Esta acción no se puede deshacer.</p>
+          <p className="text-zinc-400 text-sm leading-relaxed">{avisoBorrado(gastos, confirmId)}</p>
           <div className="flex gap-3 mt-2">
             <button
               onClick={() => setConfirmId(null)}
@@ -343,7 +445,7 @@ function HistorialTab({
  */
 function GastoRow({ g, onDelete }: { g: Gasto; onDelete: () => void }) {
   const [abierto, setAbierto] = useState(false)
-  const auto = ORIGEN_LABEL[g.origen]
+  const auto = g.origen === 'manual' ? null : TIPO_LABEL[g.origen]
 
   return (
     <div className={`border-t border-zinc-800/60 transition-colors ${abierto ? 'bg-zinc-800/30' : ''}`}>

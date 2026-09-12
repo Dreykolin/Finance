@@ -1,6 +1,9 @@
 \section{Módulo de Ahorros}
 Este módulo está orientado al seguimiento del capital acumulado y al monitoreo del progreso hacia diferentes objetivos financieros trazados por el usuario.
 
+\subsection{Ritmo y Plazo}
+El saldo acumulado, por sí solo, no permite juzgar si el usuario avanza adecuadamente. Por ello el módulo encabeza con cuatro indicadores: el \textbf{total ahorrado}, el \textbf{ritmo mensual} (promedio neto de los meses con movimiento, no de los meses corridos, para no penalizar a quien ahorra de forma intermitente), la \textbf{brecha} hasta la meta más próxima con su barra de avance, y una \textbf{estimación de plazo}: cuántos meses restan para alcanzar dicha meta si se mantiene el ritmo actual. Cuando el ritmo es nulo o negativo, el sistema lo señala expresamente en lugar de ofrecer una proyección carente de sentido.
+
 \subsection{Registro de Movimientos}
 La gestión del ahorro se basa en un historial transaccional. El usuario interactúa principalmente con una lista de \textbf{movimientos}, donde puede registrar dos tipos de operaciones que afectan su saldo disponible:
 \begin{itemize}

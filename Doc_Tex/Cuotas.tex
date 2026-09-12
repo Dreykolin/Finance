@@ -3,6 +3,11 @@ Este módulo está diseñado para llevar un seguimiento preciso de las compras r
 
 Las cifras agregadas que muestra la interfaz (total a pagar, abonado y deuda pendiente) se 	extbf{derivan} de esos dos datos como 	extit{cuotas} $	imes$ 	extit{valor}. Conviene notar que esa multiplicación no equivale al precio de lista del producto, ya que incorpora los intereses del financiamiento: representa el desembolso total comprometido, que es la magnitud relevante para el flujo de caja.
 
+\subsection{Proyección de la Carga Mensual}
+El módulo incorpora una proyección de lo que el usuario pagará en cuotas durante los próximos doce meses. Dado que cada producto aporta su cuota únicamente mientras le resten pagos, la serie solo puede descender: \textbf{cada escalón hacia abajo corresponde a una deuda que termina}.
+
+Esta lectura responde la pregunta central del módulo, que el mero listado de productos no resuelve: cuándo se libera capacidad de pago y en qué cuantía. Los indicadores que acompañan al gráfico precisan la \textbf{carga mensual} vigente, la \textbf{deuda pendiente} total, la \textbf{próxima liberación} (mes y monto en que disminuye la carga) y la fecha en que el usuario queda \textbf{libre de cuotas}.
+
 \subsection{Registro de Elementos}
 Para dar de alta un nuevo pago en cuotas, el usuario debe registrar la siguiente información del producto:
 \begin{itemize}

@@ -104,16 +104,25 @@ async function materializarCargos(userId: number) {
   try {
     await client.query('BEGIN')
     for (const { sub, periodo, fecha } of pendientes) {
+      // El cargo va primero: su UNIQUE es el que arbitra entre peticiones
+      // concurrentes. Si otra ya lo creó, esta no debe insertar el gasto.
+      const cargo = await client.query(
+        `INSERT INTO cargos_suscripciones (id_suscripcion, periodo, monto, estado, confirmado, fecha)
+         VALUES ($1,$2,$3,'cobrado',FALSE,$4)
+         ON CONFLICT (id_suscripcion, periodo) DO NOTHING
+         RETURNING id`,
+        [sub.id, periodo, sub.precio, fecha]
+      )
+      if (cargo.rows.length === 0) continue
+
       const compra = await client.query(
         `INSERT INTO compras (id_usuario, detalles, monto, metodo_pago, fecha, origen, id_suscripcion)
          VALUES ($1,$2,$3,$4,$5,'suscripcion',$6) RETURNING id`,
         [userId, nombreDe.get(sub.id), sub.precio, sub.metodo_pago ?? null, fecha, sub.id]
       )
       await client.query(
-        `INSERT INTO cargos_suscripciones (id_suscripcion, periodo, monto, estado, confirmado, fecha, id_compra)
-         VALUES ($1,$2,$3,'cobrado',FALSE,$4,$5)
-         ON CONFLICT (id_suscripcion, periodo) DO NOTHING`,
-        [sub.id, periodo, sub.precio, fecha, compra.rows[0].id]
+        'UPDATE cargos_suscripciones SET id_compra = $1 WHERE id = $2',
+        [compra.rows[0].id, cargo.rows[0].id]
       )
     }
     await client.query('COMMIT')
@@ -196,6 +205,8 @@ router.patch('/:id', async (req, res) => {
   const ciclo  = req.body.ciclo === 'anual' ? 'anual' : (req.body.ciclo === 'mensual' ? 'mensual' : sus.ciclo)
   const dia    = Number(req.body.dia_cobro ?? sus.dia_cobro)
   const activa = req.body.activa ?? sus.activa
+  // Reactivar no debe resucitar los meses de baja: el servicio corre desde hoy.
+  const reactivando = !sus.activa && activa === true
   const metodo = req.body.metodo_pago !== undefined ? req.body.metodo_pago : sus.metodo_pago
   let mes: number | null = req.body.mes_cobro !== undefined ? Number(req.body.mes_cobro) : sus.mes_cobro
 
@@ -210,9 +221,10 @@ router.patch('/:id', async (req, res) => {
 
   const updated = await pool.query(
     `UPDATE suscripciones SET nombre=$1, precio=$2, ciclo=$3, dia_cobro=$4, mes_cobro=$5,
-            activa=$6, metodo_pago=$7
-     WHERE id=$8 RETURNING *`,
-    [nombre, precio, ciclo, dia, mes, activa, metodo ?? null, sus.id]
+            activa=$6, metodo_pago=$7,
+            desde = CASE WHEN $8 THEN CURRENT_DATE ELSE desde END
+     WHERE id=$9 RETURNING *`,
+    [nombre, precio, ciclo, dia, mes, activa, metodo ?? null, reactivando, sus.id]
   )
   res.json(updated.rows[0])
 })
