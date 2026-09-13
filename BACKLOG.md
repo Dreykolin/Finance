@@ -317,6 +317,20 @@ _(ideas sin clasificar — van llegando acá)_
   avisa cuántos movimientos quedarían fuera antes de confirmar.
   *Hecho 2026-09-13 — escritorio y móvil.*
 
+- [x] **F19 . Detalle del mes al pulsar un punto del grafico.**
+  El grafico anual dice **que mes** fue distinto; ahora pulsar su punto abre **que paso
+  dentro**: serie acumulada dia a dia, cifras de cabecera y la lista de movimientos.
+  En Gastos la serie acumula contra el presupuesto (para leer el ritmo del mes); en Ahorros
+  parte del saldo que ya habia al empezar, porque un retiro sobre un saldo alto no significa
+  lo mismo que sobre uno bajo. En el mes en curso la linea se detiene hoy en vez de
+  dibujarse plana hasta fin de mes.
+  El area de clic es la columna del mes, no el circulo de 8px.
+  *Hecho 2026-09-13 - escritorio.*
+
+- [ ] **T20 . El detalle del mes no esta en movil.**
+  El grafico movil de Gastos es SVG propio con gestos, no Chart.js, asi que el mismo
+  manejador no sirve. El equivalente natural seria tocar un punto tras el zoom.
+
 - [ ] **F5 · Ingresos en el modelo.**
   Sin ingreso, la app no puede decir si el mes cierra bien: solo compara contra un límite que el usuario inventó. Habilita disponible real = ingreso − comprometido − variable − ahorro. Es la brecha estructural del producto.
   Depende de decidir si la app asume que ya sabés cuánto ganás.

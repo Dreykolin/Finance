@@ -9,6 +9,7 @@ import { useAhorros, useMetas } from '../store/useAhorros'
 import ChartContainer from '../components/ChartContainer'
 import Modal from '../components/Modal'
 import StatTile from '../components/StatTile'
+import DetalleMes, { type PuntoDia, type MovimientoDetalle } from '../components/DetalleMes'
 import { PageHeader, CardHeader, SectionLabel, Button, IconButton, Card, INPUT } from '../components/ui'
 import { formatCLP, formatFecha, mesLabel } from '../lib/format'
 import type { Ahorro, MetaAhorro } from '../types'
@@ -23,6 +24,77 @@ const META_COLORS = [
   'rgba(244,114,182,0.7)',
   'rgba(148,163,184,0.65)',
 ]
+
+/**
+ * Detalle de un mes de ahorro.
+ *
+ * A diferencia de los gastos, la serie no parte de cero: arranca del saldo que
+ * ya había al empezar el mes. Un mes de ahorro no se entiende por lo que entró,
+ * sino por dónde dejó el capital — y un retiro grande sobre un saldo alto no
+ * significa lo mismo que sobre uno bajo.
+ */
+function detalleAhorroMes(ahorros: Ahorro[], periodo: string): {
+  puntos: PuntoDia[]
+  resumen: { etiqueta: string; valor: string; acento?: boolean }[]
+  movimientos: MovimientoDetalle[]
+} {
+  const neto = (a: Ahorro) => (a.esRetiro ? -a.monto : a.monto)
+
+  const saldoPrevio = ahorros
+    .filter(a => a.fecha.slice(0, 7) < periodo)
+    .reduce((t, a) => t + neto(a), 0)
+
+  const delMes = ahorros
+    .filter(a => a.fecha.startsWith(periodo))
+    .sort((a, b) => a.fecha.localeCompare(b.fecha))
+
+  const [anio, mes] = periodo.split('-').map(Number)
+  const diasDelMes = new Date(anio, mes, 0).getDate()
+  const hoy = new Date()
+  const esMesActual = hoy.getFullYear() === anio && hoy.getMonth() + 1 === mes
+  const hasta = esMesActual ? hoy.getDate() : diasDelMes
+
+  const porDia: Record<number, number> = {}
+  delMes.forEach(a => {
+    const d = Number(a.fecha.slice(8, 10))
+    porDia[d] = (porDia[d] ?? 0) + neto(a)
+  })
+
+  let saldo = saldoPrevio
+  const puntos: PuntoDia[] = []
+  for (let d = 1; d <= hasta; d++) {
+    saldo += porDia[d] ?? 0
+    puntos.push({ etiqueta: String(d), valor: saldo })
+  }
+
+  const depositado = delMes.filter(a => !a.esRetiro).reduce((t, a) => t + a.monto, 0)
+  const retirado   = delMes.filter(a => a.esRetiro).reduce((t, a) => t + a.monto, 0)
+  const variacion  = depositado - retirado
+
+  return {
+    puntos,
+    resumen: [
+      { etiqueta: 'Saldo al cierre', valor: formatCLP(saldo), acento: true },
+      { etiqueta: 'Depositado', valor: formatCLP(depositado) },
+      { etiqueta: 'Retirado', valor: retirado > 0 ? formatCLP(retirado) : '—' },
+      {
+        etiqueta: 'Variación del mes',
+        valor: `${variacion >= 0 ? '+' : '−'}${formatCLP(Math.abs(variacion))}`,
+      },
+      { etiqueta: 'Saldo inicial', valor: formatCLP(saldoPrevio) },
+    ],
+    movimientos: delMes
+      .slice()
+      .reverse()
+      .map(a => ({
+        id: a.id,
+        fecha: a.fecha,
+        texto: a.esRetiro ? 'Retiro' : 'Depósito',
+        monto: a.monto,
+        negativo: a.esRetiro,
+      })),
+  }
+}
 
 /**
  * Ritmo y plazo. El saldo por sí solo no dice si vas bien: lo que orienta es a
@@ -104,6 +176,7 @@ export default function Ahorros() {
   const [showMetaForm, setShowMetaForm] = useState(false)
   const [confirmAhorroId, setConfirmAhorroId] = useState<number | null>(null)
   const [confirmMetaId, setConfirmMetaId] = useState<number | null>(null)
+  const [mesAbierto, setMesAbierto] = useState<string | null>(null)
 
   // Total actual
   const totalActual = ahorros.reduce((s, a) => s + (a.esRetiro ? -a.monto : a.monto), 0)
@@ -138,6 +211,7 @@ export default function Ahorros() {
         fill: true,
         pointBackgroundColor: '#8b5cf6',
         pointRadius: 4,
+        pointHoverRadius: 7,
       },
       ...metasActivas.map((m, i) => ({
         data: Array(mesesOrdenados.length).fill(m.montoObjetivo),
@@ -163,6 +237,16 @@ export default function Ahorros() {
   const chartOpts = {
     responsive: true,
     maintainAspectRatio: false,
+    interaction: { mode: 'index' as const, intersect: false },
+    // El punto de un mes lleva al movimiento de ese mes, no solo a su saldo final.
+    onClick: (_e: unknown, elementos: { index: number }[]) => {
+      const i = elementos[0]?.index
+      if (i !== undefined && mesesOrdenados[i]) setMesAbierto(mesesOrdenados[i])
+    },
+    onHover: (e: { native?: Event }, elementos: unknown[]) => {
+      const destino = (e.native?.target as HTMLElement | undefined)
+      if (destino) destino.style.cursor = elementos.length > 0 ? 'pointer' : 'default'
+    },
     plugins: {
       legend: {
         display: metasActivas.length > 0,
@@ -333,6 +417,19 @@ export default function Ahorros() {
         </Card>
         </div>
       </div>
+
+      {mesAbierto && (
+        <DetalleMes
+          open
+          onClose={() => setMesAbierto(null)}
+          titulo={`Ahorros de ${mesLabel(mesAbierto)}`}
+          etiquetaSerie="Saldo"
+          referencia={proximaMeta
+            ? { valor: proximaMeta.montoObjetivo, etiqueta: proximaMeta.nombre }
+            : null}
+          {...detalleAhorroMes(ahorros, mesAbierto)}
+        />
+      )}
 
       {/* Confirm delete ahorro */}
       <Modal open={confirmAhorroId !== null} onClose={() => setConfirmAhorroId(null)}>

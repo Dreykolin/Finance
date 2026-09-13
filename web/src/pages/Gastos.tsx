@@ -9,6 +9,7 @@ import { Line } from 'react-chartjs-2'
 import { useGastos } from '../store/useGastos'
 import ChartContainer from '../components/ChartContainer'
 import Donut, { type DonutSlice } from '../components/Donut'
+import DetalleMes, { type PuntoDia, type MovimientoDetalle } from '../components/DetalleMes'
 import Modal from '../components/Modal'
 import { formatCLP, formatFecha, mesLabel } from '../lib/format'
 import StatTile from '../components/StatTile'
@@ -22,6 +23,9 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, T
 const CHART_OPTS_BASE = {
   responsive: true,
   maintainAspectRatio: false,
+  // Detecta por columna y no por contacto con el punto: acertar un circulo de
+  // 8px con el raton es incomodo, y el objetivo util es el mes entero.
+  interaction: { mode: 'index' as const, intersect: false },
   plugins: { legend: { display: false } },
   scales: {
     x: { ticks: { color: '#71717a', font: { size: 11 } }, grid: { color: 'rgba(63,63,70,0.5)' } },
@@ -86,6 +90,7 @@ export default function Gastos() {
 }
 
 function AnalisisTab({ gastos, presupuesto }: { gastos: Gasto[], presupuesto: number }) {
+  const [mesAbierto, setMesAbierto] = useState<string | null>(null)
   if (gastos.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
@@ -117,6 +122,7 @@ function AnalisisTab({ gastos, presupuesto }: { gastos: Gasto[], presupuesto: nu
         fill: true,
         pointBackgroundColor: '#8b5cf6',
         pointRadius: 4,
+        pointHoverRadius: 7,
       },
       ...(presupuesto > 0 ? [{
         data: Array(meses.length).fill(presupuesto),
@@ -132,12 +138,24 @@ function AnalisisTab({ gastos, presupuesto }: { gastos: Gasto[], presupuesto: nu
 
   const lineOpts = {
     ...CHART_OPTS_BASE,
+    // El gráfico anual dice qué mes fue distinto; pulsarlo abre qué pasó dentro.
+    onClick: (_e: unknown, elementos: { index: number }[]) => {
+      const i = elementos[0]?.index
+      if (i !== undefined && meses[i]) setMesAbierto(meses[i])
+    },
+    onHover: (e: { native?: Event }, elementos: unknown[]) => {
+      const destino = (e.native?.target as HTMLElement | undefined)
+      if (destino) destino.style.cursor = elementos.length > 0 ? 'pointer' : 'default'
+    },
     plugins: {
       ...CHART_OPTS_BASE.plugins,
       tooltip: {
         callbacks: {
           label: (ctx: { parsed: { y: number } }) => formatCLP(ctx.parsed.y),
+          footer: () => 'Clic para ver el detalle del mes',
         },
+        footerColor: '#a1a1aa',
+        footerFont: { size: 10, weight: 'normal' as const },
       },
     },
   }
@@ -148,6 +166,17 @@ function AnalisisTab({ gastos, presupuesto }: { gastos: Gasto[], presupuesto: nu
         <Line data={lineData} options={lineOpts as never} />
       </ChartContainer>
       <DistribucionCard gastos={gastos} />
+
+      {mesAbierto && (
+        <DetalleMes
+          open
+          onClose={() => setMesAbierto(null)}
+          titulo={`Gastos de ${mesLabel(mesAbierto)}`}
+          etiquetaSerie="Gasto acumulado"
+          referencia={presupuesto > 0 ? { valor: presupuesto, etiqueta: 'Presupuesto' } : null}
+          {...detalleDelMes(gastos, mesAbierto)}
+        />
+      )}
     </>
   )
 }
@@ -351,6 +380,76 @@ function avisoBorrado(gastos: Gasto[], id: number | null): string {
   return g && g.origen !== 'manual'
     ? 'Los gastos generados por cuotas o suscripciones se deshacen desde su propio módulo.'
     : 'Esta acción no se puede deshacer.'
+}
+
+/**
+ * Arma el detalle de un mes: la serie acumulada día a día, unas cifras de
+ * cabecera y la lista de movimientos.
+ *
+ * La serie se acumula porque es lo que permite leer el ritmo del mes contra el
+ * presupuesto; el gasto suelto de cada día ya está en la lista.
+ */
+function detalleDelMes(gastos: Gasto[], periodo: string): {
+  puntos: PuntoDia[]
+  resumen: { etiqueta: string; valor: string; acento?: boolean }[]
+  movimientos: MovimientoDetalle[]
+} {
+  const delMes = gastos
+    .filter(g => g.fecha.startsWith(periodo))
+    .sort((a, b) => a.fecha.localeCompare(b.fecha))
+
+  const [anio, mes] = periodo.split('-').map(Number)
+  const diasDelMes = new Date(anio, mes, 0).getDate()
+
+  // En el mes en curso la línea se detiene hoy: dibujarla plana hasta fin de mes
+  // sugeriría que ya no se gastará más, que es una afirmación que no tenemos.
+  const hoy = new Date()
+  const esMesActual = hoy.getFullYear() === anio && hoy.getMonth() + 1 === mes
+  const hasta = esMesActual ? hoy.getDate() : diasDelMes
+
+  const porDia: Record<number, number> = {}
+  delMes.forEach(g => {
+    const d = Number(g.fecha.slice(8, 10))
+    porDia[d] = (porDia[d] ?? 0) + g.monto
+  })
+
+  let acumulado = 0
+  const puntos: PuntoDia[] = []
+  for (let d = 1; d <= hasta; d++) {
+    acumulado += porDia[d] ?? 0
+    puntos.push({ etiqueta: String(d), valor: acumulado })
+  }
+
+  const total = delMes.reduce((t, g) => t + g.monto, 0)
+  const comprometido = delMes.filter(g => g.origen !== 'manual').reduce((t, g) => t + g.monto, 0)
+  const diaPico = Object.entries(porDia).sort(([, a], [, b]) => b - a)[0]
+
+  return {
+    puntos,
+    resumen: [
+      { etiqueta: 'Total del mes', valor: formatCLP(total), acento: true },
+      { etiqueta: 'Movimientos', valor: String(delMes.length) },
+      { etiqueta: 'Comprometido', valor: formatCLP(comprometido) },
+      {
+        etiqueta: 'Día de mayor gasto',
+        valor: diaPico ? `${diaPico[0]} · ${formatCLP(diaPico[1])}` : '—',
+      },
+      {
+        etiqueta: 'Promedio diario',
+        valor: puntos.length > 0 ? formatCLP(Math.round(total / puntos.length)) : '—',
+      },
+    ],
+    movimientos: delMes
+      .slice()
+      .reverse()
+      .map(g => ({
+        id: g.id,
+        fecha: g.fecha,
+        texto: g.descripcion,
+        monto: g.monto,
+        etiqueta: g.origen === 'manual' ? g.metodoPago || undefined : TIPO_LABEL[g.origen],
+      })),
+  }
 }
 
 /**

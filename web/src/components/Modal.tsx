@@ -35,10 +35,12 @@ interface Props {
   open: boolean
   onClose: () => void
   title?: string
+  /** 'ancho' para contenido que no cabe en una columna: un gráfico, una tabla. */
+  tamano?: 'normal' | 'ancho'
   children: React.ReactNode
 }
 
-export default function Modal({ open, onClose, title, children }: Props) {
+export default function Modal({ open, onClose, title, tamano = 'normal', children }: Props) {
   const id = useRef(Symbol('dialogo'))
   // Se mantiene montado durante la animación de cierre: sin esto el diálogo
   // desaparecía de golpe mientras el fondo sí se desvanecía.
@@ -99,7 +101,7 @@ export default function Modal({ open, onClose, title, children }: Props) {
         onClick={onClose}
       />
       <div
-        className={`relative w-full md:max-w-md bg-zinc-900 md:rounded-2xl rounded-t-2xl border border-zinc-800 shadow-2xl ${
+        className={`relative w-full ${tamano === "ancho" ? "md:max-w-3xl" : "md:max-w-md"} bg-zinc-900 md:rounded-2xl rounded-t-2xl border border-zinc-800 shadow-2xl ${
           saliendo ? 'animate-dialogo-out' : 'animate-dialogo-in'
         }`}
       >
