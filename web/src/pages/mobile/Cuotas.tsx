@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Check, Trash2, Pencil, Minus, Plus } from 'lucide-react'
 import { useCuotas } from '../../store/useCuotas'
 import { formatCLP, formatFecha } from '../../lib/format'
@@ -35,6 +36,18 @@ export default function MobileCuotas() {
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [showAdd, setShowAdd]       = useState(false)
   const [editando, setEditando]     = useState(false)
+
+  // Llegar desde el historial de gastos abre directamente ese producto: el
+  // atajo "Gestionar en Cuotas" no serviría de mucho si dejara al usuario
+  // buscándolo en la lista.
+  const [params, setParams] = useSearchParams()
+  useEffect(() => {
+    const pedido = Number(params.get('producto'))
+    if (!pedido || cuotas.length === 0) return
+    if (cuotas.some(c => c.id === pedido)) setSelectedId(pedido)
+    setParams({}, { replace: true })
+  }, [params, cuotas, setParams])
+
   const [confirmId, setConfirmId]   = useState<number | null>(null)
 
   const activas      = cuotas.filter(c => c.cuotasPagadas < c.cuotasTotales)

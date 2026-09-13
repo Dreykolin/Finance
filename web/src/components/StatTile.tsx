@@ -11,7 +11,7 @@ import { Card } from './ui'
  * ahorrar más es bueno, y la misma flecha hacia arriba cambia de signo.
  */
 export default function StatTile({
-  etiqueta, valor, delta, nota, medidor, acento,
+  etiqueta, valor, delta, nota, medidor, acento, accion,
 }: {
   etiqueta: string
   valor: string
@@ -19,6 +19,8 @@ export default function StatTile({
   nota?: string
   medidor?: { pct: number; limite: string }
   acento?: boolean
+  /** Cuando la ficha señala algo que falta, el atajo para resolverlo. */
+  accion?: { texto: string; onClick: () => void }
 }) {
   return (
     <Card className="flex flex-col gap-1 min-w-0">
@@ -39,6 +41,15 @@ export default function StatTile({
       {medidor && <Medidor {...medidor} />}
 
       {nota && <p className="text-zinc-600 text-xs leading-snug mt-0.5">{nota}</p>}
+
+      {accion && (
+        <button
+          onClick={accion.onClick}
+          className="text-accent hover:opacity-80 text-xs font-bold text-left mt-0.5 transition-opacity"
+        >
+          {accion.texto}
+        </button>
+      )}
     </Card>
   )
 }

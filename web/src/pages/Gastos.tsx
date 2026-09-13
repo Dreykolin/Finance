@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Settings, Trash2, ChevronDown, TrendingUp } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Settings, Trash2, ChevronDown, TrendingUp, ArrowUpRight } from 'lucide-react'
 import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement,
   LineElement, Title, Tooltip, Legend, Filler,
@@ -11,7 +12,8 @@ import Donut, { type DonutSlice } from '../components/Donut'
 import Modal from '../components/Modal'
 import { formatCLP, formatFecha, mesLabel } from '../lib/format'
 import StatTile from '../components/StatTile'
-import { PageHeader, Card, CardHeader, SectionLabel, Button, IconButton, INPUT } from '../components/ui'
+import { useConfiguracion, desdeElCorte, type Configuracion } from '../store/useConfiguracion'
+import { PageHeader, Card, CardHeader, SectionLabel, Button, INPUT, LABEL } from '../components/ui'
 import { METODOS, TIPO_LABEL, TIPOS, SIN_METODO, colorFor, ordenCanonico } from '../lib/colors'
 import type { Gasto, NuevoGasto } from '../types'
 
@@ -29,29 +31,26 @@ const CHART_OPTS_BASE = {
 
 export default function Gastos() {
   const { gastos, agregar, eliminar } = useGastos()
-  const [presupuesto, setPresupuesto] = useState(() => {
-    return Number(localStorage.getItem('fin_presupuesto') ?? '0')
-  })
+  const { config, guardar } = useConfiguracion()
+  const presupuesto = config.presupuesto
   const [showSettings, setShowSettings] = useState(false)
-  const [presupuestoInput, setPresupuestoInput] = useState('')
 
-  function savePresupuesto() {
-    const v = parseInt(presupuestoInput)
-    if (!isNaN(v) && v > 0) {
-      setPresupuesto(v)
-      localStorage.setItem('fin_presupuesto', String(v))
-    }
-    setShowSettings(false)
-  }
+  // Solo el análisis se recorta; el historial sigue mostrando todo.
+  const paraAnalisis = desdeElCorte(gastos, config.analisisDesde)
 
   return (
     <div className="min-h-full bg-zinc-950">
       <PageHeader Icono={TrendingUp} titulo="Gastos" subtitulo="Tus movimientos y en qué se va el mes">
-        <IconButton
-          Icono={Settings}
-          title="Presupuesto mensual"
-          onClick={() => { setPresupuestoInput(presupuesto > 0 ? String(presupuesto) : ''); setShowSettings(true) }}
-        />
+        {/* Con dos ajustes dentro, un engranaje a secas ya no dice qué hay. */}
+        <Button
+          variante="secundario"
+          tamano="sm"
+          onClick={() => setShowSettings(true)}
+          className="flex items-center gap-1.5 py-2"
+        >
+          <Settings size={15} />
+          Ajustes
+        </Button>
       </PageHeader>
 
       {/*
@@ -61,36 +60,26 @@ export default function Gastos() {
         * en escritorio las dos vistas caben simultáneamente.
         */}
       <div className="px-5 pb-5">
-        <ResumenMes gastos={gastos} presupuesto={presupuesto} />
+        <ResumenMes
+          gastos={paraAnalisis}
+          presupuesto={presupuesto}
+          onConfigurar={() => setShowSettings(true)}
+        />
       </div>
 
       <div className="px-5 pb-5 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-5 items-start">
         <div className="flex flex-col gap-5 xl:sticky xl:top-5">
-          <AnalisisTab gastos={gastos} presupuesto={presupuesto} />
+          <AnalisisTab gastos={paraAnalisis} presupuesto={presupuesto} />
         </div>
         <HistorialTab gastos={gastos} onAgregar={agregar} onEliminar={eliminar} />
       </div>
 
-      {/* Settings modal */}
       <Modal open={showSettings} onClose={() => setShowSettings(false)} title="Configuración">
-        <div className="flex flex-col gap-4">
-          <div>
-            <label className="text-zinc-400 text-xs font-bold uppercase tracking-wider block mb-2">
-              Presupuesto Mensual
-            </label>
-            <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-3 focus-within:border-accent transition-colors">
-              <span className="text-zinc-500 font-bold">$</span>
-              <input
-                type="number"
-                className="flex-1 bg-transparent text-white outline-none text-sm"
-                placeholder={presupuesto > 0 ? String(presupuesto) : '0'}
-                value={presupuestoInput}
-                onChange={e => setPresupuestoInput(e.target.value)}
-              />
-            </div>
-          </div>
-          <Button onClick={savePresupuesto}>Guardar</Button>
-        </div>
+        <FormConfiguracion
+          config={config}
+          gastos={gastos}
+          onGuardar={async c => { await guardar(c); setShowSettings(false) }}
+        />
       </Modal>
     </div>
   )
@@ -164,11 +153,120 @@ function AnalisisTab({ gastos, presupuesto }: { gastos: Gasto[], presupuesto: nu
 }
 
 /**
+ * Ajustes del módulo.
+ *
+ * La fecha de corte existe para quien empieza a usar la aplicación con compras
+ * en cuotas ya en marcha: al registrarlas, los meses anteriores se llenan con
+ * esas cuotas y con nada más, porque el resto del gasto de entonces nunca se
+ * anotó. No son meses incompletos, son meses sesgados a la baja, y hunden la
+ * media y la tendencia. Recortar el análisis es preferible a borrar movimientos
+ * que sí ocurrieron.
+ */
+function FormConfiguracion({ config, gastos, onGuardar }: {
+  config: Configuracion
+  gastos: Gasto[]
+  onGuardar: (c: Partial<Configuracion>) => Promise<void>
+}) {
+  const [presupuesto, setPresupuesto] = useState(config.presupuesto ? String(config.presupuesto) : '')
+  const [desde, setDesde] = useState(config.analisisDesde ?? '')
+  const [guardando, setGuardando] = useState(false)
+
+  // Cuántos movimientos quedarían fuera con la fecha elegida, para que la
+  // decisión no sea a ciegas.
+  const fuera = desde ? gastos.filter(g => g.fecha < desde).length : 0
+  const primerGasto = gastos.reduce((min, g) => (!min || g.fecha < min ? g.fecha : min), '')
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    setGuardando(true)
+    try {
+      await onGuardar({
+        presupuesto: parseInt(presupuesto) || 0,
+        analisisDesde: desde || null,
+      })
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="flex flex-col gap-5">
+      <div>
+        <label className={LABEL}>Presupuesto mensual</label>
+        <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus-within:border-accent transition-colors">
+          <span className="text-zinc-500 font-bold">$</span>
+          <input
+            type="number"
+            min="0"
+            className="flex-1 bg-transparent text-white outline-none text-sm"
+            placeholder="0"
+            value={presupuesto}
+            onChange={e => setPresupuesto(e.target.value.replace(/\D/g, ''))}
+          />
+        </div>
+        <p className="text-zinc-600 text-xs mt-2">
+          Se guarda en tu cuenta, así que te acompaña en cualquier dispositivo.
+        </p>
+      </div>
+
+      <div className="h-px bg-zinc-800" />
+
+      <div>
+        <label className={LABEL}>Analizar desde</label>
+        <input
+          type="date"
+          className={INPUT}
+          value={desde}
+          onChange={e => setDesde(e.target.value)}
+          max={new Date().toISOString().slice(0, 10)}
+        />
+        <p className="text-zinc-600 text-xs mt-2 leading-relaxed">
+          Los gráficos y promedios ignorarán lo anterior a esta fecha. Útil si
+          registraste cuotas que venías pagando: esos meses solo tienen esas cuotas
+          y ninguno de tus demás gastos de entonces, así que hunden la media.
+          <span className="block mt-1">El historial sigue mostrando todo.</span>
+        </p>
+
+        {fuera > 0 && (
+          <p className="text-yellow-500/90 text-xs mt-2">
+            {fuera} {fuera === 1 ? 'movimiento quedará fuera' : 'movimientos quedarán fuera'} del análisis.
+          </p>
+        )}
+
+        {desde && (
+          <button
+            type="button"
+            onClick={() => setDesde('')}
+            className="text-zinc-500 hover:text-zinc-300 text-xs font-bold mt-2 transition-colors"
+          >
+            Considerar todo el historial
+          </button>
+        )}
+
+        {!desde && primerGasto && (
+          <p className="text-zinc-600 text-xs mt-2">
+            Ahora se analiza desde {formatFecha(primerGasto)}, tu primer movimiento.
+          </p>
+        )}
+      </div>
+
+      <Button type="submit" disabled={guardando}>
+        {guardando ? 'Guardando…' : 'Guardar'}
+      </Button>
+    </form>
+  )
+}
+
+/**
  * Los cuatro números con los que se abre el mes. Van como fichas y no como
  * gráfico: para un valor único un gráfico de una sola barra no aporta nada que
  * la cifra no diga mejor.
  */
-function ResumenMes({ gastos, presupuesto }: { gastos: Gasto[]; presupuesto: number }) {
+function ResumenMes({ gastos, presupuesto, onConfigurar }: {
+  gastos: Gasto[]
+  presupuesto: number
+  onConfigurar: () => void
+}) {
   const hoy = new Date()
   const clave = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
   const mesActual   = clave(hoy)
@@ -210,7 +308,9 @@ function ResumenMes({ gastos, presupuesto }: { gastos: Gasto[]; presupuesto: num
         medidor={presupuesto > 0
           ? { pct: totalMes / presupuesto, limite: formatCLP(presupuesto) }
           : undefined}
-        nota={presupuesto === 0 ? 'Fija un presupuesto para ver el avance' : undefined}
+        accion={presupuesto === 0
+          ? { texto: 'Fijar un presupuesto', onClick: onConfigurar }
+          : undefined}
       />
 
       <StatTile
@@ -248,14 +348,9 @@ function ResumenMes({ gastos, presupuesto }: { gastos: Gasto[]; presupuesto: num
  */
 function avisoBorrado(gastos: Gasto[], id: number | null): string {
   const g = gastos.find(x => x.id === id)
-  if (!g) return 'Esta acción no se puede deshacer.'
-  if (g.origen === 'cuota') {
-    return 'Este gasto lo generó una cuota. Al borrarlo se descontará esa cuota del producto, como si el pago no hubiera ocurrido.'
-  }
-  if (g.origen === 'suscripcion') {
-    return 'Este gasto lo generó una suscripción. Al borrarlo, ese mes quedará marcado como no cobrado en su carril.'
-  }
-  return 'Esta acción no se puede deshacer.'
+  return g && g.origen !== 'manual'
+    ? 'Los gastos generados por cuotas o suscripciones se deshacen desde su propio módulo.'
+    : 'Esta acción no se puede deshacer.'
 }
 
 /**
@@ -429,6 +524,7 @@ function HistorialTab({
  */
 function GastoRow({ g, onDelete }: { g: Gasto; onDelete: () => void }) {
   const [abierto, setAbierto] = useState(false)
+  const navegar = useNavigate()
   const auto = g.origen === 'manual' ? null : TIPO_LABEL[g.origen]
 
   return (
@@ -448,13 +544,30 @@ function GastoRow({ g, onDelete }: { g: Gasto; onDelete: () => void }) {
         <div className="animate-despliegue">
           <div className="px-4 pb-3 flex flex-col gap-2.5">
           <p className="text-zinc-300 text-sm leading-snug break-words">{g.descripcion}</p>
-          <div className="flex items-center justify-between">
-            <button
-              onClick={onDelete}
-              className="text-red-500/80 hover:text-red-400 transition-colors"
-            >
-              <Trash2 size={16} />
-            </button>
+          <div className="flex items-center justify-between gap-2">
+            {/*
+              * Un gasto que nació de una cuota o suscripción no se borra desde
+              * aquí: se deshace en su módulo, donde la acción dice exactamente
+              * lo que hace. En su lugar, un atajo hasta allí.
+              */}
+            {auto ? (
+              <button
+                onClick={() => navegar(g.origen === 'cuota'
+                  ? `/cuotas${g.idCuota ? `?producto=${g.idCuota}` : ''}`
+                  : '/suscripciones')}
+                className="flex items-center gap-1.5 text-zinc-500 hover:text-accent transition-colors text-xs font-bold"
+              >
+                Gestionar en {auto}
+                <ArrowUpRight size={13} />
+              </button>
+            ) : (
+              <button
+                onClick={onDelete}
+                className="text-red-500/80 hover:text-red-400 transition-colors"
+              >
+                <Trash2 size={16} />
+              </button>
+            )}
             <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded ${
               auto ? 'bg-accent/15 text-accent' : 'bg-zinc-800 text-zinc-400'
             }`}>

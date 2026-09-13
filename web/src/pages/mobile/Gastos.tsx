@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect } from 'react'
-import { Settings, Trash2, ChevronLeft, ChevronRight, Maximize2, X } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Settings, Trash2, ChevronLeft, ChevronRight, Maximize2, X, ArrowUpRight } from 'lucide-react'
 import { useGastos } from '../../store/useGastos'
 import { formatCLP, formatFecha } from '../../lib/format'
 import Modal from '../../components/Modal'
 import Donut, { type DonutSlice } from '../../components/Donut'
 import StatTile from '../../components/StatTile'
-import { Card, SectionLabel, Button, INPUT } from '../../components/ui'
+import { Card, SectionLabel, Button, INPUT, LABEL } from '../../components/ui'
+import { useConfiguracion, desdeElCorte } from '../../store/useConfiguracion'
 import { METODOS, TIPO_LABEL, TIPOS, SIN_METODO, SECUENCIAL, colorFor, ordenCanonico } from '../../lib/colors'
 import type { Gasto, NuevoGasto } from '../../types'
 
@@ -457,7 +459,11 @@ function DonutSlider({ gastos, delMes, mesActual, mesOffset, rangoMes, onPrev, o
 }
 
 /** Los cuatro indicadores de escritorio, apilados de dos en dos. */
-function ResumenMesMovil({ gastos, presupuesto }: { gastos: Gasto[]; presupuesto: number }) {
+function ResumenMesMovil({ gastos, presupuesto, onConfigurar }: {
+  gastos: Gasto[]
+  presupuesto: number
+  onConfigurar: () => void
+}) {
   const hoy = new Date()
   const clave = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
   const suma = (xs: Gasto[]) => xs.reduce((t, g) => t + g.monto, 0)
@@ -479,6 +485,9 @@ function ResumenMesMovil({ gastos, presupuesto }: { gastos: Gasto[]; presupuesto
         valor={formatCLP(total)}
         delta={previo > 0 ? { pct: (total - previo) / previo * 100, respecto: 'vs. anterior' } : undefined}
         medidor={presupuesto > 0 ? { pct: total / presupuesto, limite: formatCLP(presupuesto) } : undefined}
+        accion={presupuesto === 0
+          ? { texto: 'Fijar presupuesto', onClick: onConfigurar }
+          : undefined}
       />
       <StatTile
         etiqueta="Cierre previsto"
@@ -507,8 +516,13 @@ export default function MobileGastos() {
   const [showForm, setShowForm]   = useState(false)
   const [confirmId, setConfirmId] = useState<number | null>(null)
   const [showSettings, setShowSettings] = useState(false)
+  const { config, guardar } = useConfiguracion()
+  const presupuestoVal = config.presupuesto
   const [presupuestoInput, setPresupuestoInput] = useState('')
-  const [presupuestoVal, setPresupuestoVal] = useState(() => Number(localStorage.getItem('fin_presupuesto') ?? '0'))
+  const [desdeInput, setDesdeInput] = useState('')
+
+  // El recorte afecta al análisis; el historial del mes sigue completo.
+  const paraAnalisis = desdeElCorte(gastos, config.analisisDesde)
 
   const mesActual = getMes(mesOffset)
   const delMes    = gastos.filter(g => g.fecha.startsWith(mesActual))
@@ -533,13 +547,18 @@ export default function MobileGastos() {
     return formatFecha(fecha)
   }
 
-  function savePresupuesto() {
-    const v = parseInt(presupuestoInput)
-    if (!isNaN(v) && v > 0) {
-      setPresupuestoVal(v)
-      localStorage.setItem('fin_presupuesto', String(v))
-    }
+  async function guardarAjustes() {
+    await guardar({
+      presupuesto: parseInt(presupuestoInput) || 0,
+      analisisDesde: desdeInput || null,
+    })
     setShowSettings(false)
+  }
+
+  function abrirAjustes() {
+    setPresupuestoInput(config.presupuesto > 0 ? String(config.presupuesto) : '')
+    setDesdeInput(config.analisisDesde ?? '')
+    setShowSettings(true)
   }
 
   return (
@@ -552,7 +571,7 @@ export default function MobileGastos() {
             <p className="text-zinc-500 text-sm mt-0.5">Gestión de gastos</p>
           </div>
           <button
-            onClick={() => { setPresupuestoInput(presupuestoVal > 0 ? String(presupuestoVal) : ''); setShowSettings(true) }}
+            onClick={abrirAjustes}
             className="w-10 h-10 flex items-center justify-center rounded-xl bg-zinc-900 text-accent active:bg-zinc-800"
           >
             <Settings size={18} />
@@ -574,20 +593,24 @@ export default function MobileGastos() {
       {/* ── ANÁLISIS ── */}
       {tab === 'analisis' && (
         <div className="flex-1 px-6 py-6 pb-28 flex flex-col gap-5">
-          <ResumenMesMovil gastos={gastos} presupuesto={presupuestoVal} />
+          <ResumenMesMovil
+            gastos={paraAnalisis}
+            presupuesto={presupuestoVal}
+            onConfigurar={abrirAjustes}
+          />
           <SectionLabel>Dashboard</SectionLabel>
 
           {/* Tendencia mensual */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl py-5">
             <p className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-widest px-6 mb-4">Tendencia Mensual</p>
             <div className="px-2">
-              <TendenciaChart gastos={gastos} presupuesto={presupuestoVal} />
+              <TendenciaChart gastos={paraAnalisis} presupuesto={presupuestoVal} />
             </div>
           </div>
 
           {/* Distribución — slider */}
           <DonutSlider
-            gastos={gastos}
+            gastos={paraAnalisis}
             delMes={delMes}
             mesActual={mesActual}
             mesOffset={mesOffset}
@@ -680,14 +703,38 @@ export default function MobileGastos() {
         </div>
       </Modal>
 
-      <Modal open={showSettings} onClose={() => setShowSettings(false)} title="Presupuesto mensual">
-        <div className="flex flex-col gap-4">
-          <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-700 rounded-2xl px-4 py-3.5 focus-within:border-accent transition-colors">
-            <span className="text-zinc-500 font-bold">$</span>
-            <input type="number" className="flex-1 bg-transparent text-white outline-none" placeholder="0"
-              value={presupuestoInput} onChange={e => setPresupuestoInput(e.target.value)} />
+      <Modal open={showSettings} onClose={() => setShowSettings(false)} title="Configuración">
+        <div className="flex flex-col gap-5">
+          <div>
+            <label className={LABEL}>Presupuesto mensual</label>
+            <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3.5 focus-within:border-accent transition-colors">
+              <span className="text-zinc-500 font-bold">$</span>
+              <input type="number" className="flex-1 bg-transparent text-white outline-none" placeholder="0"
+                value={presupuestoInput} onChange={e => setPresupuestoInput(e.target.value.replace(/\D/g, ''))} />
+            </div>
           </div>
-          <button onClick={savePresupuesto} className="bg-accent text-white font-bold rounded-2xl py-3.5 active:opacity-80">Guardar</button>
+
+          <div className="h-px bg-zinc-800" />
+
+          <div>
+            <label className={LABEL}>Analizar desde</label>
+            <input type="date" className={INPUT} value={desdeInput}
+              onChange={e => setDesdeInput(e.target.value)}
+              max={new Date().toISOString().slice(0, 10)} />
+            <p className="text-zinc-600 text-xs mt-2 leading-relaxed">
+              Los gráficos y promedios ignorarán lo anterior. Útil si registraste
+              cuotas que ya venías pagando: esos meses solo tienen esas cuotas y
+              hunden la media. El historial sigue mostrando todo.
+            </p>
+            {desdeInput && (
+              <button type="button" onClick={() => setDesdeInput('')}
+                className="text-zinc-500 active:text-zinc-300 text-xs font-bold mt-2">
+                Considerar todo el historial
+              </button>
+            )}
+          </div>
+
+          <Button onClick={guardarAjustes}>Guardar</Button>
         </div>
       </Modal>
     </div>
@@ -696,6 +743,8 @@ export default function MobileGastos() {
 
 function GastoRow({ g, onDelete }: { g: Gasto; onDelete: () => void }) {
   const [expanded, setExpanded] = useState(false)
+  const navegar = useNavigate()
+  const auto = g.origen === 'manual' ? null : TIPO_LABEL[g.origen]
   return (
     <div onClick={() => setExpanded(e => !e)} className={`px-4 py-3.5 transition-colors ${expanded ? 'bg-zinc-800/40' : ''}`}>
       <div className="flex items-center">
@@ -705,10 +754,26 @@ function GastoRow({ g, onDelete }: { g: Gasto; onDelete: () => void }) {
       </div>
       {expanded && (
         <div className="animate-despliegue">
-          <div className="flex items-center justify-between mt-3 pt-3 border-t border-zinc-800">
-          <button onClick={e => { e.stopPropagation(); onDelete() }} className="text-red-500/70 active:text-red-400">
-            <Trash2 size={18} />
-          </button>
+          <div className="flex items-center justify-between gap-2 mt-3 pt-3 border-t border-zinc-800">
+          {/* Se deshace en su módulo, no aquí: allí la acción es inequívoca. */}
+          {auto ? (
+            <button
+              onClick={e => {
+                e.stopPropagation()
+                navegar(g.origen === 'cuota'
+                  ? `/mobile/cuotas${g.idCuota ? `?producto=${g.idCuota}` : ''}`
+                  : '/mobile/suscripciones')
+              }}
+              className="flex items-center gap-1.5 text-zinc-500 active:text-accent text-xs font-bold"
+            >
+              Gestionar en {auto}
+              <ArrowUpRight size={13} />
+            </button>
+          ) : (
+            <button onClick={e => { e.stopPropagation(); onDelete() }} className="text-red-500/70 active:text-red-400">
+              <Trash2 size={18} />
+            </button>
+          )}
           <Insignia gasto={g} />
           </div>
         </div>

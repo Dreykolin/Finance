@@ -10,6 +10,7 @@ import comprasRoutes       from './routes/compras.js'
 import cuotasRoutes        from './routes/cuotas.js'
 import suscripcionesRoutes from './routes/suscripciones.js'
 import reservasRoutes      from './routes/reservas.js'
+import configRoutes        from './routes/configuracion.js'
 
 const app  = express()
 const PORT = process.env.PORT ?? 3000
@@ -26,6 +27,7 @@ app.use('/compras',       comprasRoutes)
 app.use('/cuotas',        cuotasRoutes)
 app.use('/suscripciones', suscripcionesRoutes)
 app.use('/reservas',      reservasRoutes)
+app.use('/configuracion', configRoutes)
 
 initDb()
   .then(() => {

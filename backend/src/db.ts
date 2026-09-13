@@ -107,6 +107,12 @@ export async function initDb() {
 
     ALTER TABLE reservas ADD COLUMN IF NOT EXISTS completada BOOLEAN NOT NULL DEFAULT FALSE;
 
+    -- Ajustes del usuario. El presupuesto vivia en el navegador y no viajaba
+    -- entre dispositivos; analisis_desde recorta desde donde los datos son
+    -- representativos, para quien empieza con cuotas ya en curso.
+    ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS presupuesto_mensual INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS analisis_desde DATE;
+
     -- Vínculo de las compras auto-generadas con su origen.
     -- SET NULL (no CASCADE): si se borra el producto, el pago ya ocurrió y debe
     -- seguir en el historial de gastos; solo pierde la trazabilidad.

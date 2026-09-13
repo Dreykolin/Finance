@@ -25,11 +25,13 @@ router.post('/', async (req, res) => {
 })
 
 /**
- * Borrar un gasto auto-generado equivale a decir que ese pago no ocurrió, así
- * que hay que deshacerlo también en su origen: de lo contrario la cuota seguiría
- * contando el pago y el carril de la suscripción mostraría un cobro sin gasto
- * detrás. Es la misma reversión que ofrecen los otros dos módulos, alcanzada
- * desde el historial.
+ * Solo se borran los gastos registrados a mano.
+ *
+ * Un gasto que nació de una cuota o de una suscripción no se puede quitar desde
+ * aquí, porque desde el historial la intención es ambigua: puede significar "ese
+ * cobro no ocurrió" —que obliga a deshacerlo también en su origen— o "sí ocurrió,
+ * pero no quiero verlo". En su módulo la acción no admite esa duda: deshacer una
+ * cuota o marcar un mes como no cobrado dicen exactamente lo que hacen.
  */
 router.delete('/:id', async (req, res) => {
   const client = await pool.connect()
@@ -41,29 +43,29 @@ router.delete('/:id', async (req, res) => {
     const compra = rows[0]
     if (!compra) { res.status(404).json({ error: 'No encontrado' }); return }
 
-    await client.query('BEGIN')
-
     if (compra.id_cuota) {
-      await client.query(
-        `UPDATE cuotas SET cuotas_pagadas = GREATEST(cuotas_pagadas - 1, 0)
-         WHERE id = $1 AND id_usuario = $2`,
-        [compra.id_cuota, req.user!.id]
-      )
+      res.status(409).json({
+        error: 'Este gasto lo generó una cuota',
+        detalle: 'Para deshacerlo, usa "Deshacer última cuota" en el producto.',
+        origen: 'cuota',
+        id_origen: compra.id_cuota,
+      })
+      return
     }
 
     if (compra.id_suscripcion) {
-      await client.query(
-        `UPDATE cargos_suscripciones SET estado = 'omitido', confirmado = TRUE, id_compra = NULL
-         WHERE id_compra = $1`,
-        [compra.id]
-      )
+      res.status(409).json({
+        error: 'Este gasto lo generó una suscripción',
+        detalle: 'Para deshacerlo, marca ese mes como no cobrado en su carril.',
+        origen: 'suscripcion',
+        id_origen: compra.id_suscripcion,
+      })
+      return
     }
 
     await client.query('DELETE FROM compras WHERE id = $1', [compra.id])
-    await client.query('COMMIT')
-    res.json({ ok: true, revirtio: Boolean(compra.id_cuota || compra.id_suscripcion) })
+    res.json({ ok: true })
   } catch (e) {
-    await client.query('ROLLBACK').catch(() => {})
     console.error('DELETE /compras/:id', e)
     res.status(500).json({ error: 'No se pudo eliminar' })
   } finally {

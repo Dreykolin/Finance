@@ -10,6 +10,8 @@ function mapGasto(r: any): Gasto {
     fecha:     r.fecha.slice(0, 10),
     metodoPago: r.metodo_pago ?? '',
     origen:     r.origen ?? 'manual',
+    idCuota:       r.id_cuota ?? null,
+    idSuscripcion: r.id_suscripcion ?? null,
   }
 }
 

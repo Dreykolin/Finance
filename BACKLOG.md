@@ -98,6 +98,14 @@ _(ideas sin clasificar — van llegando acá)_
   carril parecía desalineado, como si faltaran celdas en vez de no corresponder.
   *Hecho 2026-09-12.*
 
+- [x] **B18 . Los gastos automaticos ya no se borran desde el historial.**
+  Borrar desde Movimientos era ambiguo: puede significar "ese cobro no ocurrio" (que obliga
+  a deshacerlo en su origen) o "si ocurrio, pero no quiero verlo". En su modulo la accion
+  no admite esa duda. Ahora el backend responde 409 y la interfaz no ofrece el boton:
+  en su lugar, un atajo "Gestionar en Cuotas / Suscripciones" que abre directamente el
+  producto (via ?producto=ID). Los gastos registrados a mano se borran igual que antes.
+  *Hecho 2026-09-13.*
+
 - [x] **B17 · La migración de B16 tumbó el despliegue.**
   `invalid reference to FROM-clause entry for table "c"`: PostgreSQL no permite que un
   `LATERAL` del `FROM` referencie la tabla que el `UPDATE` está modificando. `initDb()`
@@ -199,8 +207,12 @@ _(ideas sin clasificar — van llegando acá)_
 
 ## F — Features / ideas
 
-- [ ] **F1 · Presupuesto mensual vive en `localStorage`.**
-  `fin_presupuesto` no se sincroniza entre dispositivos ni sobrevive un borrado de datos. Moverlo al backend (tabla `configuracion` o columna en `usuarios`).
+- [x] **F1 · Presupuesto y ajustes en la cuenta, no en el navegador.**
+  Vivía en `localStorage`: no viajaba entre dispositivos y se perdía al limpiar datos.
+  Ahora hay `/configuracion` con `presupuesto_mensual` y `analisis_desde`. Quien ya lo
+  tenía puesto no lo pierde: al cargar por primera vez se sube el valor local y se borra
+  la clave antigua.
+  *Hecho 2026-09-13.*
 
 - [x] **F2 . Suscripciones: de booleano a cargos por periodo.**
   `pagado` no sabia a que mes correspondia y el reseteo manual borraba la historia. Ahora cada suscripcion declara ciclo (mensual/anual) y dia de cobro, y cada cobro es una fila en `cargos_suscripciones` con periodo, monto congelado y estado. Los cargos vencidos se materializan solos al listar (sin cron) y se dan por cobrados, generando el gasto; el usuario marca los que no ocurrieron. Carril de 7 meses navegable en desktop. Se elimino el boton de reseteo (backend y ambas plataformas).
@@ -291,6 +303,19 @@ _(ideas sin clasificar — van llegando acá)_
   cambia el perfil de riesgo del proyecto: la app pasaría de guardar lo que el usuario
   escribió a custodiar su historial bancario — momento en que T6 (token en la query string)
   y T5 dejan de ser deuda menor.
+
+- [x] **F18 · Fecha de corte del análisis.**
+  Cualquiera que empiece a usar la aplicación con compras en cuotas ya en marcha acaba
+  con meses que contienen esas cuotas y **ninguno** de sus demás gastos de entonces. No
+  son meses incompletos: están sesgados a la baja, y hunden la media y la tendencia.
+  Es un problema del producto, no de unos datos concretos — por eso no vale resolverlo
+  borrando filas a mano.
+
+  "Analizar desde" en Configuración recorta gráficos y promedios. **El historial sigue
+  mostrando todo**: esos movimientos ocurrieron y deben poder consultarse; lo que no
+  deben es arrastrar conclusiones calculadas sobre meses a medio registrar. El diálogo
+  avisa cuántos movimientos quedarían fuera antes de confirmar.
+  *Hecho 2026-09-13 — escritorio y móvil.*
 
 - [ ] **F5 · Ingresos en el modelo.**
   Sin ingreso, la app no puede decir si el mes cierra bien: solo compara contra un límite que el usuario inventó. Habilita disponible real = ingreso − comprometido − variable − ahorro. Es la brecha estructural del producto.

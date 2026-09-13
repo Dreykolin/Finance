@@ -6,6 +6,9 @@ export interface Gasto {
   fecha: string; // YYYY-MM-DD
   /** 'manual' | 'cuota' | 'suscripcion' — las dos últimas se generan solas. */
   origen: string;
+  /** Registro que generó el gasto, para poder llevar al usuario hasta él. */
+  idCuota?: number | null;
+  idSuscripcion?: number | null;
 }
 
 /** Lo que el cliente envía al crear un gasto: `origen` lo asigna el servidor. */
