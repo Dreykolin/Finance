@@ -11,17 +11,18 @@ import { PageHeader, Card, CardHeader, Button, INPUT, LABEL } from '../component
 import { formatCLP } from '../lib/format'
 import {
   MESES, ventana, etiquetaMes, periodoActual, estadoCelda, editable,
-  ESTILO_CELDA, type EstadoCelda,
+  ESTILO_CELDA, cobroYaVencidoEsteMes, textoFechaCobro, type EstadoCelda,
 } from '../lib/cargos'
 import type { Suscripcion, NuevaSuscripcion } from '../types'
 
 /** Celda del carril en escritorio, donde hay sitio para el ratón y el título. */
-function Celda({ estado, onClick, title }: {
+function Celda({ estado, periodo, onClick, title }: {
   estado: EstadoCelda
+  periodo: string
   onClick?: () => void
   title: string
 }) {
-  const activa = editable(estado)
+  const activa = editable(estado, periodo)
   return (
     <button
       type="button"
@@ -208,13 +209,16 @@ export default function Suscripciones() {
                   cobrado:      `Cobrado · ${formatCLP(cargo?.monto ?? s.monto)} · clic para marcar que no ocurrió`,
                   porConfirmar: `Se dio por cobrado · ${formatCLP(cargo?.monto ?? s.monto)} · clic si no ocurrió`,
                   omitido:      'No se cobró · clic para reponerlo',
-                  proyectado:   'Cobro proyectado',
+                  proyectado:   p <= periodoActual()
+                    ? 'Aún sin registrar · clic si ya te lo cobraron'
+                    : 'Cobro proyectado',
                   noAplica:     '',
                 }
                 return (
                   <Celda
                     key={p}
                     estado={estado}
+                    periodo={p}
                     title={titulos[estado]}
                     onClick={() => alternarCargo(s.id, p)}
                   />
@@ -332,7 +336,12 @@ function FormSuscripcion({ inicial, onSave }: {
   const [dia, setDia]         = useState(String(inicial?.diaCobro ?? 1))
   const [mes, setMes]         = useState(String(inicial?.mesCobro ?? new Date().getMonth() + 1))
   const [metodo, setMetodo]   = useState(inicial?.metodoPago ?? '')
+  const [yaCobrado, setYaCobrado] = useState(true)
   const [guardando, setGuardando] = useState(false)
+
+  // Cambia con el día y el ciclo que el usuario va eligiendo, así que se calcula
+  // en cada render en lugar de guardarse en estado.
+  const vencidoEsteMes = cobroYaVencidoEsteMes(ciclo, parseInt(dia) || 0, parseInt(mes))
 
   const inputCls = INPUT
   const labelCls = LABEL
@@ -350,6 +359,9 @@ function FormSuscripcion({ inicial, onSave }: {
         diaCobro: Math.min(Math.max(d, 1), 31),
         mesCobro: ciclo === 'anual' ? parseInt(mes) : null,
         metodoPago: metodo,
+        // Retrasar el inicio hasta la fecha de cobro hace que este mes entre;
+        // dejarlo en hoy lo deja fuera, que es lo correcto para un alta nueva.
+        desde: vencidoEsteMes && yaCobrado ? vencidoEsteMes : undefined,
       })
     } finally {
       setGuardando(false)

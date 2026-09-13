@@ -71,6 +71,14 @@ export async function initDb() {
     ALTER TABLE cuotas        ADD COLUMN IF NOT EXISTS metodo_pago TEXT;
     ALTER TABLE suscripciones ADD COLUMN IF NOT EXISTS metodo_pago TEXT;
 
+    -- Cuándo cae el primer cobro, que no es lo mismo que la fecha de compra:
+    -- comprar a fin de mes suele caer en la factura del mes siguiente, y hay
+    -- cuotas que se debitan en fecha propia (MercadoLibre) en vez de llegar en
+    -- la factura de la tarjeta. Declarando solo la primera, las demás se derivan
+    -- sumando meses, que es lo que permite avisar cuál ya venció.
+    ALTER TABLE cuotas ADD COLUMN IF NOT EXISTS fecha_primer_cobro DATE;
+    UPDATE cuotas SET fecha_primer_cobro = fecha WHERE fecha_primer_cobro IS NULL;
+
     -- ── Suscripciones: de un booleano sin tiempo a cargos por período ────────
     -- 'pagado' no sabía a qué mes correspondía y el reseteo manual borraba la
     -- historia. Ahora cada cobro es una fila con su período y su monto propio.

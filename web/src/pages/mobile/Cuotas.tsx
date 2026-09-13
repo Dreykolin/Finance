@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Check, Trash2, Pencil, Minus, Plus } from 'lucide-react'
 import { useCuotas } from '../../store/useCuotas'
 import { formatCLP, formatFecha } from '../../lib/format'
+import { proximoCobro, cuotasAtrasadas, hoyISO } from '../../lib/cuotas'
 import Modal from '../../components/Modal'
 import StatTile from '../../components/StatTile'
 import MetodoPicker from '../../components/MetodoPicker'
@@ -68,6 +69,8 @@ export default function MobileCuotas() {
 
         {cuotas.map(c => {
           const completada = c.cuotasPagadas >= c.cuotasTotales
+          const atrasadas  = cuotasAtrasadas(c)
+          const proxima    = proximoCobro(c)
           return (
             <button
               key={c.id}
@@ -81,9 +84,19 @@ export default function MobileCuotas() {
                 <p className="text-zinc-400 text-xs mt-0.5">
                   {c.cuotasPagadas}/{c.cuotasTotales} · {formatCLP(c.montoCuota)}/cuota
                 </p>
+                {proxima && (
+                  <p className="text-zinc-600 text-xs mt-0.5">
+                    Próxima {formatFecha(proxima.fecha)}
+                  </p>
+                )}
               </div>
               {completada && (
                 <span className="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded-full">Listo</span>
+              )}
+              {!completada && atrasadas > 0 && (
+                <span className="text-[10px] font-bold text-yellow-500 bg-yellow-500/10 px-2 py-1 rounded-full whitespace-nowrap">
+                  {atrasadas} sin marcar
+                </span>
               )}
             </button>
           )
@@ -129,11 +142,38 @@ export default function MobileCuotas() {
                 <span className="text-zinc-500 text-sm">Restante</span>
                 <span className="text-white font-bold text-lg">{formatCLP((selected.cuotasTotales - selected.cuotasPagadas) * selected.montoCuota)}</span>
               </div>
+              {(() => {
+                const proxima = proximoCobro(selected)
+                if (!proxima) return null
+                const vencida = proxima.fecha <= hoyISO()
+                return (
+                  <>
+                    <div className="h-px bg-zinc-800" />
+                    <div className="flex justify-between">
+                      <span className="text-zinc-500 text-sm">
+                        {vencida ? 'Cuota vencida' : 'Próximo cobro'}
+                      </span>
+                      <span className={`font-bold text-sm ${vencida ? 'text-yellow-500' : 'text-accent'}`}>
+                        {formatFecha(proxima.fecha)} · cuota {proxima.numero}
+                      </span>
+                    </div>
+                  </>
+                )
+              })()}
               <p className="text-zinc-600 text-xs text-center">
                 Desde {formatFecha(selected.fechaInicio)}
                 {selected.metodoPago && ` · ${selected.metodoPago}`}
               </p>
             </div>
+
+            {cuotasAtrasadas(selected) > 0 && (
+              <p className="text-yellow-500/90 text-xs leading-relaxed text-center -mt-2">
+                {cuotasAtrasadas(selected) === 1
+                  ? 'Ya venció 1 cuota que no has marcado.'
+                  : `Ya vencieron ${cuotasAtrasadas(selected)} cuotas que no has marcado.`}
+                {' '}Márcalas si ya te las cobraron.
+              </p>
+            )}
             <div className="flex flex-col gap-3 w-full">
               <div className="flex gap-3">
                 <button
@@ -203,6 +243,7 @@ function FormEditarCuotaMovil({ cuota, onSave, onCancel }: {
   const [montoCuota, setMontoCuota]       = useState(String(cuota.montoCuota))
   const [pagadas, setPagadas]             = useState(String(cuota.cuotasPagadas))
   const [metodo, setMetodo]               = useState(cuota.metodoPago ?? '')
+  const [primerCobro, setPrimerCobro]     = useState(cuota.fechaPrimerCobro || cuota.fechaInicio)
   const [guardando, setGuardando]         = useState(false)
 
   const nTot = parseInt(cuotasTotales) || 0
@@ -220,6 +261,7 @@ function FormEditarCuotaMovil({ cuota, onSave, onCancel }: {
         montoCuota: parseInt(montoCuota) || 0,
         cuotasPagadas: nPag,
         metodoPago: metodo,
+        fechaPrimerCobro: primerCobro,
       })
     } finally { setGuardando(false) }
   }
@@ -271,6 +313,16 @@ function FormEditarCuotaMovil({ cuota, onSave, onCancel }: {
       </div>
 
       <div>
+        <label className={LABEL}>Primer cobro</label>
+        <input className={INPUT} type="date" value={primerCobro}
+          onChange={e => setPrimerCobro(e.target.value)} required />
+        <p className="text-zinc-600 text-xs mt-1.5 leading-relaxed">
+          Cuándo te cobran la primera cuota: la fecha de tu factura, o el día del
+          débito si la tienda cobra aparte.
+        </p>
+      </div>
+
+      <div>
         <label className={LABEL}>Con qué la pagas</label>
         <MetodoPicker valor={metodo} onChange={setMetodo} opcional />
       </div>
@@ -291,12 +343,21 @@ function FormCuota({ onSave }: { onSave: (c: Omit<CompraCuotas, 'id'>) => void }
   const [tienda, setTienda]             = useState('')
   const [cuotasTotales, setCuotasTotales] = useState('')
   const [montoCuota, setMontoCuota]     = useState('')
+  const [primerCobro, setPrimerCobro]   = useState(hoyISO())
   const inputCls = "w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3.5 text-white outline-none focus:border-accent transition-colors placeholder:text-zinc-600"
 
   function submit(e: React.FormEvent) {
     e.preventDefault()
     if (!producto || !tienda || !cuotasTotales || !montoCuota) return
-    onSave({ producto, tienda, cuotasTotales: parseInt(cuotasTotales), cuotasPagadas: 0, montoCuota: parseInt(montoCuota), fechaInicio: new Date().toISOString().slice(0, 10), metodoPago: metodo })
+    onSave({
+      producto, tienda,
+      cuotasTotales: parseInt(cuotasTotales),
+      cuotasPagadas: 0,
+      montoCuota: parseInt(montoCuota),
+      fechaInicio: hoyISO(),
+      fechaPrimerCobro: primerCobro,
+      metodoPago: metodo,
+    })
   }
 
   return (
@@ -306,6 +367,15 @@ function FormCuota({ onSave }: { onSave: (c: Omit<CompraCuotas, 'id'>) => void }
       <div className="grid grid-cols-2 gap-3">
         <input className={inputCls} type="number" placeholder="N° cuotas" value={cuotasTotales} onChange={e => setCuotasTotales(e.target.value.replace(/\D/g,''))} min="1" required />
         <input className={inputCls} type="number" placeholder="Valor cuota" value={montoCuota} onChange={e => setMontoCuota(e.target.value.replace(/\D/g,''))} min="0" required />
+      </div>
+      <div>
+        <label className={LABEL}>Primer cobro</label>
+        <input className={inputCls} type="date" value={primerCobro}
+          onChange={e => setPrimerCobro(e.target.value)} required />
+        <p className="text-zinc-600 text-xs mt-1.5 leading-relaxed">
+          Cuándo te cobran la primera cuota: la fecha de tu factura, o el día del
+          débito si la tienda cobra aparte.
+        </p>
       </div>
       <div>
         <label className={LABEL}>Con qué la pagas</label>

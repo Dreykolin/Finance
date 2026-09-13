@@ -84,6 +84,20 @@ _(ideas sin clasificar — van llegando acá)_
   arriba) y sitúa cada diálogo por encima del anterior.
   *Hecho 2026-09-12.*
 
+- [x] **B14 · Dar de alta un servicio cuyo cobro del mes ya pasó no registraba ese cobro.**
+  `desde` se fijaba en la fecha de alta y la materialización exige `fechaCobro >= desde`:
+  un servicio con cobro el día 10, registrado el 12, se quedaba fuera por dos días.
+  **No se resolvió con una regla automática**: registrar algo que ya tenías y contratar
+  algo nuevo hoy son casos opuestos, y dar por hecho el cobro en el segundo inventaría un
+  gasto. El formulario pregunta, pero solo cuando hay ambigüedad —el día ya pasó—, con
+  "ya lo tenía" por defecto.
+  *Hecho 2026-09-12.*
+
+- [x] **B15 · Las celdas que no aplican eran invisibles.**
+  Borde `zinc-900` sobre fondo `zinc-900`: los meses anteriores al alta desaparecían y el
+  carril parecía desalineado, como si faltaran celdas en vez de no corresponder.
+  *Hecho 2026-09-12.*
+
 ---
 
 ## T — Técnico / deuda
@@ -203,6 +217,51 @@ _(ideas sin clasificar — van llegando acá)_
   cómo se ve de verdad en pantalla. Falta levantar la app contra la base y recorrer
   las cuatro pantallas.
 
+- [ ] **F16 · Bandeja de transacciones importadas.** *(la línea grande)*
+  Importar la cartola del banco y clasificar cada línea en lugar de teclearla. Ataca la
+  debilidad estructural del producto: hoy **todo** depende de que el usuario registre a mano,
+  y ese es el motivo por el que las apps así se abandonan a las tres semanas.
+
+  **Flujo:** cartola (CSV que el banco ya exporta) → transacciones crudas → conciliación
+  automática → bandeja con lo no reconocido → el usuario decide: gasto directo, cargo de
+  una suscripción (existente o nueva), cuota de un producto (existente o nuevo, rellenando
+  cuántas van), o ignorar. **El efectivo se sigue registrando a mano**, y está bien: no es
+  un defecto, es el estado actual sobreviviendo mientras el resto se automatiza.
+
+  **La pieza que decide si funciona: la regla se aprende una vez.** Si cada mes hay que
+  volver a identificar el mismo cargo, el esfuerzo es constante y no se ganó nada.
+  Identificado una vez, se guarda el patrón y a partir de ahí llega conciliado. El trabajo
+  es alto el primer mes y tiende a cero.
+
+  **El cierre del círculo:** el campo `confirmado` de los cargos existe porque nadie podía
+  verificarlos. La cartola *es* esa verificación — lo que aparece se confirma solo, lo que
+  no aparece se marca como no cobrado y su gasto se borra. "Por revisar" deja de ser una
+  tarea del usuario.
+
+  **Lo difícil de verdad:**
+  1. *Duplicados* — un gasto anotado a mano que además viene en la cartola. Emparejar por
+     monto y fecha aproximada, y decidir cuál gana.
+  2. *El descriptor es inestable* — `GOOGLE *YOUTUBE` / `GOOGLE*YOUTUBEPREMIUM`, con sufijos
+     variables. Emparejar por patrón normalizado, nunca por texto exacto.
+  3. *Cuotas* — muchas cartolas chilenas traen `CUOTA 3/12` en la glosa: si está, el producto
+     se crea con su progreso; si no, lo rellena el usuario.
+
+  **No requiere Open Finance** (ver F17): el CSV del banco basta, y deja construido el motor
+  que Open Finance necesitaría igual.
+
+- [ ] **F17 · Open Finance como fuente, después de F16.**
+  Sustituiría la importación manual del archivo por conexión automática. En Chile lo rige la
+  Ley Fintec (21.521) y el Sistema de Finanzas Abiertas de la CMF; operar directamente exige
+  inscripción en registro y obligaciones desproporcionadas para este proyecto, así que la vía
+  realista es un agregador ya registrado (Fintoc, Belvo, Floid), con costo por usuario o por
+  consulta. **El calendario de implementación del SFA hay que verificarlo en la CMF**: el que
+  manejo puede estar desactualizado.
+
+  Empezar por aquí sería pagar por un flujo de datos que todavía no se sabe procesar. Y
+  cambia el perfil de riesgo del proyecto: la app pasaría de guardar lo que el usuario
+  escribió a custodiar su historial bancario — momento en que T6 (token en la query string)
+  y T5 dejan de ser deuda menor.
+
 - [ ] **F5 · Ingresos en el modelo.**
   Sin ingreso, la app no puede decir si el mes cierra bien: solo compara contra un límite que el usuario inventó. Habilita disponible real = ingreso − comprometido − variable − ahorro. Es la brecha estructural del producto.
   Depende de decidir si la app asume que ya sabés cuánto ganás.
@@ -232,6 +291,18 @@ _(ideas sin clasificar — van llegando acá)_
   (CMR, Ripley, Líder), que en Chile es un medio distinto del crédito bancario y muy común
   justamente en compras en cuotas. No lo agregué por mi cuenta: cambia el vocabulario
   compartido con el formulario de gastos.
+
+- [x] **F14 · La celda del mes en curso se puede marcar a mano.**
+  Antes solo era pulsable un cargo ya materializado, así que un servicio dado de alta
+  tarde no tenía forma de corregirse desde el carril. Ahora alternar un periodo no futuro
+  crea el cargo si falta, con su gasto. Resuelve también las suscripciones creadas antes
+  de B14, que de otro modo habría que borrar y volver a crear.
+  *Hecho 2026-09-12.*
+
+- [ ] **F15 · Declarar desde cuándo tienes un servicio.**
+  Hoy el carril solo puede llenarse hacia atrás marcando mes a mes. Un campo "lo tengo
+  desde" en el alta poblaría el histórico de una vez — y con él, el acumulado real de
+  cuánto llevas pagado.
 
 - [ ] **F8 . Recordatorio de cobros proximos.**
   Ya existe el dato (dia de cobro): falta avisar antes de que ocurra. Hoy el carril solo se mira si entras.

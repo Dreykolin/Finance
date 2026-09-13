@@ -8,6 +8,7 @@ import { Card, Button, INPUT, LABEL } from '../../components/ui'
 import MetodoPicker from '../../components/MetodoPicker'
 import {
   MESES, ventana, etiquetaMes, periodoActual, estadoCelda, editable, ESTILO_CELDA,
+  cobroYaVencidoEsteMes, textoFechaCobro,
 } from '../../lib/cargos'
 import type { Suscripcion, NuevaSuscripcion } from '../../types'
 
@@ -55,7 +56,7 @@ function FilaServicio({ s, periodos, onAlternar, onEditar, onBaja, onEliminar }:
         {periodos.map(p => {
           const cargo = s.cargos.find(c => c.periodo === p)
           const estado = estadoCelda(s, p, cargo)
-          const activa = editable(estado)
+          const activa = editable(estado, p)
           return (
             <button
               key={p}
@@ -247,7 +248,10 @@ function FormSuscripcion({ inicial, onSave }: {
   const [dia, setDia]       = useState(String(inicial?.diaCobro ?? 1))
   const [mes, setMes]       = useState(String(inicial?.mesCobro ?? new Date().getMonth() + 1))
   const [metodo, setMetodo] = useState(inicial?.metodoPago ?? '')
+  const [yaCobrado, setYaCobrado] = useState(true)
   const [guardando, setGuardando] = useState(false)
+
+  const vencidoEsteMes = cobroYaVencidoEsteMes(ciclo, parseInt(dia) || 0, parseInt(mes))
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -262,6 +266,7 @@ function FormSuscripcion({ inicial, onSave }: {
         diaCobro: Math.min(Math.max(d, 1), 31),
         mesCobro: ciclo === 'anual' ? parseInt(mes) : null,
         metodoPago: metodo,
+        desde: vencidoEsteMes && yaCobrado ? vencidoEsteMes : undefined,
       })
     } finally {
       setGuardando(false)
@@ -308,6 +313,45 @@ function FormSuscripcion({ inicial, onSave }: {
             onChange={e => setDia(e.target.value.replace(/\D/g, ''))} required />
         </div>
       </div>
+
+      {/*
+        * Aparece solo cuando hay ambigüedad real: el día de cobro de este mes ya
+        * pasó. Registrar un servicio que ya tenías y contratar uno nuevo hoy son
+        * casos opuestos y ninguna regla automática acierta en los dos.
+        */}
+      {!inicial && vencidoEsteMes && (
+        <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 flex flex-col gap-3">
+          <p className="text-zinc-300 text-sm leading-snug">
+            El cobro del <span className="font-bold text-white">{textoFechaCobro(vencidoEsteMes)}</span> ya pasó.
+            ¿Te lo cobraron?
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setYaCobrado(true)}
+              className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-colors ${
+                yaCobrado ? 'bg-accent text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+              }`}
+            >
+              Sí, ya lo tenía
+            </button>
+            <button
+              type="button"
+              onClick={() => setYaCobrado(false)}
+              className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-colors ${
+                !yaCobrado ? 'bg-accent text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+              }`}
+            >
+              No, lo contraté hoy
+            </button>
+          </div>
+          <p className="text-zinc-600 text-xs leading-relaxed">
+            {yaCobrado
+              ? 'Se registrará el cobro de este mes y su gasto correspondiente.'
+              : 'El primer cobro será el del mes que viene.'}
+          </p>
+        </div>
+      )}
 
       <div>
         <label className={LABEL}>A dónde te lo cobran</label>

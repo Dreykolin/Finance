@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react'
 import { api } from '../lib/api'
+import { aISO } from '../lib/cuotas'
 import type { CompraCuotas } from '../types'
 
+// Las fechas llegan como DATE de Postgres, que se serializa con hora ('...T00:00:00.000Z').
+// Se recortan a 'YYYY-MM-DD' para poder compararlas y formatearlas como texto.
 function mapCuota(r: any): CompraCuotas {
   return {
     id:           r.id,
@@ -10,7 +13,8 @@ function mapCuota(r: any): CompraCuotas {
     cuotasTotales: r.cuotas_totales,
     cuotasPagadas: r.cuotas_pagadas,
     montoCuota:   r.monto_cuota,
-    fechaInicio:  r.fecha,
+    fechaInicio:  aISO(r.fecha),
+    fechaPrimerCobro: aISO(r.fecha_primer_cobro) || aISO(r.fecha),
     metodoPago:   r.metodo_pago ?? '',
   }
 }
@@ -31,6 +35,7 @@ export function useCuotas() {
       cuotas_totales:  c.cuotasTotales,
       monto_cuota:     c.montoCuota,
       fecha:           c.fechaInicio,
+      fecha_primer_cobro: c.fechaPrimerCobro || c.fechaInicio,
       metodo_pago:     c.metodoPago || null,
     })
     setCuotas(prev => [...prev, mapCuota(created)])
@@ -53,6 +58,7 @@ export function useCuotas() {
       monto_cuota:     c.montoCuota,
       cuotas_pagadas:  c.cuotasPagadas,
       metodo_pago:     c.metodoPago,
+      fecha_primer_cobro: c.fechaPrimerCobro,
     })
     setCuotas(prev => prev.map(x => x.id === id ? mapCuota(updated) : x))
   }

@@ -19,6 +19,12 @@ export interface CompraCuotas {
   cuotasPagadas: number;
   montoCuota: number;
   fechaInicio: string;
+  /**
+   * Cuándo cae la primera cuota. No coincide con la compra: comprar a fin de mes
+   * suele caer en la factura siguiente, y hay cuotas que se debitan en fecha
+   * propia. Las demás cuotas se derivan sumando meses a esta.
+   */
+  fechaPrimerCobro: string;
   /** Medio con el que se paga cada cuota; lo heredan los gastos generados. */
   metodoPago: string;
 }
@@ -70,4 +76,10 @@ export interface Suscripcion {
 export type NuevaSuscripcion = Pick<Suscripcion, 'nombre' | 'monto' | 'ciclo' | 'diaCobro'> & {
   mesCobro?: number | null;
   metodoPago?: string;
+  /**
+   * Desde cuándo corre el servicio ('YYYY-MM-DD'). Marca el límite hacia atrás
+   * de los cobros que se dan por ocurridos: al dar de alta algo que ya tenías,
+   * retrasarla hasta la fecha de cobro hace que este mes cuente.
+   */
+  desde?: string;
 };

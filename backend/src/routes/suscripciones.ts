@@ -244,8 +244,44 @@ router.post('/:id/cargos/:periodo', async (req, res) => {
        WHERE c.id_suscripcion = $1 AND c.periodo = $2 AND s.id_usuario = $3`,
       [req.params.id, req.params.periodo, req.user!.id]
     )
-    const cargo = rows[0]
-    if (!cargo) { res.status(404).json({ error: 'Cargo no encontrado' }); return }
+    let cargo = rows[0]
+
+    // Puede no existir todavía: es el caso de un servicio dado de alta después
+    // de su fecha de cobro, o del mes en curso antes de que venza. Mientras el
+    // periodo no sea futuro, marcarlo a mano es una afirmación legítima del
+    // usuario — "esto me lo cobraron"— y se crea el cargo en ese momento.
+    if (!cargo) {
+      const { rows: subs } = await client.query(
+        'SELECT * FROM suscripciones WHERE id = $1 AND id_usuario = $2',
+        [req.params.id, req.user!.id]
+      )
+      const sus = subs[0]
+      if (!sus) { res.status(404).json({ error: 'No encontrado' }); return }
+      if (req.params.periodo > hoyStr().slice(0, 7)) {
+        res.status(400).json({ error: 'Ese cobro aún no ha llegado' }); return
+      }
+
+      const [y, m] = req.params.periodo.split('-').map(Number)
+      const fecha = fechaCobro(y, m, sus.dia_cobro)
+      const creado = await client.query(
+        `INSERT INTO cargos_suscripciones (id_suscripcion, periodo, monto, estado, confirmado, fecha)
+         VALUES ($1,$2,$3,'omitido',TRUE,$4)
+         ON CONFLICT (id_suscripcion, periodo) DO NOTHING
+         RETURNING *`,
+        [sus.id, req.params.periodo, sus.precio, fecha]
+      )
+      // Nace como 'omitido' para que la alternancia de abajo lo pase a cobrado
+      // y genere su gasto por el mismo camino que cualquier otro.
+      const { rows: recien } = creado.rows.length > 0
+        ? { rows: [{ ...creado.rows[0], nombre: sus.nombre, metodo_pago: sus.metodo_pago }] }
+        : await client.query(
+            `SELECT c.*, s.nombre, s.metodo_pago FROM cargos_suscripciones c
+             JOIN suscripciones s ON s.id = c.id_suscripcion
+             WHERE c.id_suscripcion = $1 AND c.periodo = $2`,
+            [sus.id, req.params.periodo]
+          )
+      cargo = recien[0]
+    }
 
     const nuevoEstado = cargo.estado === 'cobrado' ? 'omitido' : 'cobrado'
 
