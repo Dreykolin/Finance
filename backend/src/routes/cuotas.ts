@@ -5,6 +5,58 @@ import { requireAuth } from '../middleware/auth.js'
 const router = Router()
 router.use(requireAuth)
 
+// ── Calendario de cuotas ────────────────────────────────────────────────────
+// Espejo de web/src/lib/cuotas.ts. El gasto de una cuota pertenece al mes en que
+// esa cuota se cobra, no al día en que el usuario la registra: ponerse al día con
+// un producto antiguo no debe amontonar un año de cargos en el mes en curso.
+
+/** Suma meses respetando el fin de mes (31 de enero + 1 mes = 28/29 de febrero). */
+function sumarMeses(iso: string, meses: number): string {
+  const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number)
+  if (!y || !m || !d) return ''
+  const total = m - 1 + meses
+  const anio = y + Math.floor(total / 12)
+  const mes = ((total % 12) + 12) % 12
+  const ultimoDia = new Date(anio, mes + 1, 0).getDate()
+  const dia = Math.min(d, ultimoDia)
+  return `${anio}-${String(mes + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`
+}
+
+const hoyISO = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** Fecha del cobro n (1 = primera cuota); recurre a hoy si no hay calendario. */
+function fechaDeCuota(cuota: { fecha_primer_cobro?: string | Date | null; fecha?: string | Date }, n: number): string {
+  const base = cuota.fecha_primer_cobro ?? cuota.fecha
+  const iso = base instanceof Date
+    ? `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, '0')}-${String(base.getDate()).padStart(2, '0')}`
+    : String(base ?? '').slice(0, 10)
+  return sumarMeses(iso, n - 1) || hoyISO()
+}
+
+/** Inserta el gasto de la cuota n, fechado donde corresponde. */
+async function insertarGastoDeCuota(
+  client: { query: (q: string, v: unknown[]) => Promise<unknown> },
+  userId: number,
+  cuota: { id: number; nombre_producto: string; cuotas_totales: number; monto_cuota: number; metodo_pago?: string | null; fecha_primer_cobro?: string | Date | null; fecha?: string | Date },
+  n: number,
+) {
+  await client.query(
+    `INSERT INTO compras (id_usuario, detalles, monto, metodo_pago, fecha, origen, id_cuota)
+     VALUES ($1,$2,$3,$4,$5,'cuota',$6)`,
+    [
+      userId,
+      `${cuota.nombre_producto} (${n}/${cuota.cuotas_totales})`,
+      cuota.monto_cuota,
+      cuota.metodo_pago ?? null,
+      fechaDeCuota(cuota, n),
+      cuota.id,
+    ]
+  )
+}
+
 router.get('/', async (req, res) => {
   const result = await pool.query(
     'SELECT * FROM cuotas WHERE id_usuario = $1 ORDER BY fecha DESC',
@@ -20,11 +72,36 @@ router.post('/', async (req, res) => {
   }
   // Si no se declara, el primer cobro se asume el día de la compra.
   const fecha_primer_cobro = req.body.fecha_primer_cobro || fecha
-  const result = await pool.query(
-    'INSERT INTO cuotas (id_usuario, nombre_producto, tienda, cuotas_totales, cuotas_pagadas, monto_cuota, fecha, metodo_pago, fecha_primer_cobro) VALUES ($1,$2,$3,$4,0,$5,$6,$7,$8) RETURNING *',
-    [req.user!.id, nombre_producto, tienda, cuotas_totales, monto_cuota, fecha, metodo_pago ?? null, fecha_primer_cobro]
+  // Un producto que ya venías pagando puede declarar cuántas cuotas lleva; sus
+  // gastos se generan en los meses que les corresponden, no en el de hoy.
+  const yaPagadas = Math.min(
+    Math.max(Number(req.body.cuotas_pagadas) || 0, 0),
+    Number(cuotas_totales),
   )
-  res.json(result.rows[0])
+
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const result = await client.query(
+      `INSERT INTO cuotas (id_usuario, nombre_producto, tienda, cuotas_totales, cuotas_pagadas,
+                           monto_cuota, fecha, metodo_pago, fecha_primer_cobro)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      [req.user!.id, nombre_producto, tienda, cuotas_totales, yaPagadas,
+       monto_cuota, fecha, metodo_pago ?? null, fecha_primer_cobro]
+    )
+    const creada = result.rows[0]
+    for (let n = 1; n <= yaPagadas; n++) {
+      await insertarGastoDeCuota(client, req.user!.id, creada, n)
+    }
+    await client.query('COMMIT')
+    res.json(creada)
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {})
+    console.error('POST /cuotas', e)
+    res.status(500).json({ error: 'No se pudo registrar la compra' })
+  } finally {
+    client.release()
+  }
 })
 
 // Marcar cuota → genera compra automáticamente
@@ -40,17 +117,12 @@ router.post('/:id/marcar', async (req, res) => {
   }
 
   const nuevasPagadas = cuota.cuotas_pagadas + 1
-  const fecha    = new Date().toISOString().slice(0, 10)
-  const detalles = `${cuota.nombre_producto} (${nuevasPagadas}/${cuota.cuotas_totales})`
 
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
     await client.query('UPDATE cuotas SET cuotas_pagadas = $1 WHERE id = $2', [nuevasPagadas, cuota.id])
-    await client.query(
-      "INSERT INTO compras (id_usuario, detalles, monto, metodo_pago, fecha, origen, id_cuota) VALUES ($1,$2,$3,$4,$5,'cuota',$6)",
-      [req.user!.id, detalles, cuota.monto_cuota, cuota.metodo_pago ?? null, fecha, cuota.id]
-    )
+    await insertarGastoDeCuota(client, req.user!.id, cuota, nuevasPagadas)
     await client.query('COMMIT')
   } catch (e) {
     await client.query('ROLLBACK'); throw e
@@ -119,6 +191,14 @@ router.patch('/:id', async (req, res) => {
          )`,
         [cuota.id, req.user!.id, revertidas]
       )
+    } else if (revertidas < 0) {
+      // Subir el contador de golpe equivale a marcar esas cuotas: se generan sus
+      // gastos, cada uno en el mes que le toca. Evita tener que pulsar "marcar"
+      // doce veces para un producto que ya venías pagando.
+      const datos = { ...cuota, nombre_producto, cuotas_totales, monto_cuota, metodo_pago, fecha_primer_cobro }
+      for (let n = cuota.cuotas_pagadas + 1; n <= cuotas_pagadas; n++) {
+        await insertarGastoDeCuota(client, req.user!.id, datos, n)
+      }
     }
     await client.query('COMMIT')
 

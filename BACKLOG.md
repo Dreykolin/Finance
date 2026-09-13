@@ -98,6 +98,22 @@ _(ideas sin clasificar — van llegando acá)_
   carril parecía desalineado, como si faltaran celdas en vez de no corresponder.
   *Hecho 2026-09-12.*
 
+- [x] **B16 · Los gastos de cuota se fechaban el día de registro, no el del cobro.**
+  `POST /cuotas/:id/marcar` usaba `new Date()`, así que ponerse al día con un producto
+  antiguo amontonaba todas sus cuotas en el mes en curso y lo inflaba — un notebook en 24
+  cuotas con 8 pagadas metía $240.000 en septiembre. Ahora cada gasto se fecha en
+  `fecha_primer_cobro + (n-1) meses`, respetando fin de mes.
+  Además: el alta acepta cuotas ya pagadas y el `PATCH` genera los gastos que faltan al
+  subir el contador, en vez de obligar a pulsar "marcar" doce veces.
+  **Incluye reparación de los datos ya creados**, que se re-fechan al arrancar el backend
+  leyendo el número de cuota del propio detalle.
+  *Hecho 2026-09-13.*
+
+- [ ] **T19 · El calendario de cuotas está escrito dos veces.**
+  `web/src/lib/cuotas.ts` y las funciones nuevas de `backend/src/routes/cuotas.ts` calculan
+  lo mismo. Es deliberado por ahora (no hay código compartido entre ambos proyectos), pero
+  si una cambia y la otra no, las fechas dejan de coincidir en silencio.
+
 ---
 
 ## T — Técnico / deuda

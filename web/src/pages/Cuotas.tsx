@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CreditCard, ShoppingBag, Check, Trash2, Plus, Pencil, Minus } from 'lucide-react'
+import { CreditCard, Check, Trash2, Plus, Pencil, Minus } from 'lucide-react'
 import { useCuotas } from '../store/useCuotas'
 import Modal from '../components/Modal'
 import MetodoPicker from '../components/MetodoPicker'
@@ -181,29 +181,42 @@ export default function Cuotas() {
       <div className="h-px bg-zinc-800 mx-5 mb-5" />
 
       {cuotas.length > 0 && (
-        <div className="px-5 mb-5 flex flex-col gap-5">
+        <div className="px-5 mb-5">
           <ResumenCuotas cuotas={cuotas} />
-          <Card tipo="grafico">
-            <div className="px-5 mb-1">
-              <SectionLabel>Carga mensual proyectada</SectionLabel>
-              <p className="text-zinc-600 text-xs mt-1">
-                Lo que pagarás cada mes si no tomas nuevas cuotas. Cada escalón hacia
-                abajo es un producto que terminas.
-              </p>
-            </div>
-            <div className="px-2 mt-3">
-              <ColumnasMensuales
-                puntos={cargaFutura(cuotas)}
-                formatear={formatCLP}
-                notaVacio="No te quedan cuotas por pagar."
-              />
-            </div>
-          </Card>
         </div>
       )}
 
-      {/* Product list */}
-      <div className="px-5 flex flex-col gap-4">
+      {/*
+        * Mismo reparto que Gastos y Ahorros: a la izquierda lo que se lee, a la
+        * derecha lo que se edita. La lista de productos crece sin límite y antes
+        * quedaba enterrada bajo el gráfico; ahora sube a la primera pantalla y es
+        * el gráfico el que se queda fijo mientras se recorre.
+        */}
+      <div className={`px-5 pb-5 grid grid-cols-1 gap-5 items-start ${
+        cuotas.length > 0 ? 'xl:grid-cols-[minmax(0,1fr)_380px]' : ''
+      }`}>
+        {cuotas.length > 0 && (
+          <div className="xl:sticky xl:top-5">
+            <Card tipo="grafico">
+              <div className="px-5 mb-1">
+                <SectionLabel>Carga mensual proyectada</SectionLabel>
+                <p className="text-zinc-600 text-xs mt-1">
+                  Lo que pagarás cada mes si no tomas nuevas cuotas. Cada escalón hacia
+                  abajo es un producto que terminas.
+                </p>
+              </div>
+              <div className="px-2 mt-3">
+                <ColumnasMensuales
+                  puntos={cargaFutura(cuotas)}
+                  formatear={formatCLP}
+                  notaVacio="No te quedan cuotas por pagar."
+                />
+              </div>
+            </Card>
+          </div>
+        )}
+
+      <div className="flex flex-col gap-3">
         <SectionLabel>Tus Productos</SectionLabel>
 
         {cuotas.length === 0 && (
@@ -217,25 +230,30 @@ export default function Cuotas() {
             <button
               key={c.id}
               onClick={() => setSelectedId(c.id)}
-              className="w-full bg-zinc-900/50 border border-zinc-800 rounded-2xl p-4 flex items-center justify-between hover:bg-zinc-900 transition-colors text-left"
+              className="w-full bg-zinc-900/50 border border-zinc-800 rounded-2xl p-4 flex flex-col gap-1 hover:bg-zinc-900 transition-colors text-left"
             >
-              <div>
-                <p className="text-white font-bold text-base">{c.producto}</p>
-                <p className="text-zinc-500 text-sm mt-0.5">
-                  {c.tienda} · {c.cuotasPagadas}/{c.cuotasTotales} cuotas
-                </p>
-                <p className="text-zinc-600 text-xs mt-0.5">
-                  {formatCLP(c.montoCuota)}/cuota
-                  {proxima && ` · próxima ${formatFecha(proxima.fecha)}`}
-                </p>
-              </div>
-              <div className="flex items-center gap-3 ml-3 flex-shrink-0">
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-white font-bold text-sm min-w-0 truncate">{c.producto}</p>
+                {/* El aviso va arriba y no al final: es lo que hay que atender. */}
                 {atrasadas > 0 && (
-                  <span className="text-yellow-500 text-xs font-bold whitespace-nowrap">
+                  <span className="text-yellow-500 text-[11px] font-bold whitespace-nowrap flex-shrink-0">
                     {atrasadas} sin marcar
                   </span>
                 )}
-                <ShoppingBag size={18} className="text-zinc-700" />
+              </div>
+              <p className="text-zinc-500 text-xs truncate">
+                {c.tienda} · {c.cuotasPagadas}/{c.cuotasTotales} cuotas
+              </p>
+              <p className="text-zinc-600 text-xs truncate">
+                {formatCLP(c.montoCuota)}/cuota
+                {proxima && ` · próxima ${formatFecha(proxima.fecha)}`}
+              </p>
+              {/* Avance, que en una columna estrecha se lee mejor que un icono. */}
+              <div className="h-1 bg-zinc-800 rounded-full overflow-hidden mt-1.5">
+                <div
+                  className="h-full bg-accent rounded-full transition-all"
+                  style={{ width: `${Math.round(c.cuotasPagadas / c.cuotasTotales * 100)}%` }}
+                />
               </div>
             </button>
           )
@@ -249,6 +267,7 @@ export default function Cuotas() {
           <Plus size={18} />
           <span className="font-medium text-sm">Registrar nueva compra</span>
         </button>
+      </div>
       </div>
 
       {/* Detail modal */}

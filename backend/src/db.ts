@@ -77,6 +77,28 @@ export async function initDb() {
     -- la factura de la tarjeta. Declarando solo la primera, las demás se derivan
     -- sumando meses, que es lo que permite avisar cuál ya venció.
     ALTER TABLE cuotas ADD COLUMN IF NOT EXISTS fecha_primer_cobro DATE;
+
+    -- Reparación: los gastos de cuota se fechaban el día en que se pulsaba
+    -- "marcar", no el mes en que esa cuota se cobra. Ponerse al día con un
+    -- producto antiguo amontonaba un año de cargos en el mes en curso.
+    --
+    -- El número de cuota se lee del propio detalle ("Producto (3/24)"), anclado
+    -- al final para no confundirlo con paréntesis del nombre. La expresión va sin
+    -- barras invertidas a propósito: este SQL vive en un template literal de JS,
+    -- que las consume antes de que Postgres las vea. Idempotente: la última
+    -- condición deja fuera lo que ya está bien fechado.
+    UPDATE compras c
+    SET fecha = (q.fecha_primer_cobro + ((num.n - 1) * INTERVAL '1 month'))::date
+    FROM cuotas q,
+         LATERAL (
+           SELECT ((regexp_match(c.detalles, '[(]([0-9]+)/[0-9]+[)]$'))[1])::int AS n
+         ) num
+    WHERE c.id_cuota = q.id
+      AND c.origen = 'cuota'
+      AND q.fecha_primer_cobro IS NOT NULL
+      AND num.n IS NOT NULL
+      AND num.n >= 1
+      AND c.fecha IS DISTINCT FROM (q.fecha_primer_cobro + ((num.n - 1) * INTERVAL '1 month'))::date;
     UPDATE cuotas SET fecha_primer_cobro = fecha WHERE fecha_primer_cobro IS NULL;
 
     -- ── Suscripciones: de un booleano sin tiempo a cargos por período ────────
