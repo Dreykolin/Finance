@@ -6,6 +6,56 @@ export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 })
 
+/**
+ * Correcciones sobre datos ya existentes.
+ *
+ * Van separadas del esquema y con su propio manejo de errores a propósito: que
+ * las tablas existan es condición para arrancar, pero re-fechar gastos antiguos
+ * no lo es. Si esto falla, se registra y el servicio sigue en pie en vez de
+ * quedarse abajo por una reparación histórica.
+ */
+async function repararDatos() {
+  try {
+    const r = await pool.query(`
+      -- Los gastos de cuota se fechaban el día en que se pulsaba "marcar", no el
+      -- mes en que esa cuota se cobra: ponerse al día con un producto antiguo
+      -- amontonaba un año de cargos en el mes en curso.
+      --
+      -- El número de cuota se lee del propio detalle ("Producto (3/24)"), anclado
+      -- al final para no confundirlo con paréntesis del nombre. La expresión va
+      -- sin barras invertidas a propósito: este SQL vive en un template literal
+      -- de JavaScript, que las consume antes de que Postgres las vea.
+      --
+      -- El cálculo va en un CTE y no en un LATERAL dentro del FROM porque
+      -- Postgres no deja referenciar desde allí la tabla que el UPDATE modifica.
+      -- Idempotente: solo se escriben las filas cuya fecha no es ya la correcta.
+      WITH correccion AS (
+        SELECT
+          c.id,
+          (q.fecha_primer_cobro
+            + (((regexp_match(c.detalles, '[(]([0-9]+)/[0-9]+[)]$'))[1]::int - 1)
+               * INTERVAL '1 month'))::date AS correcta
+        FROM compras c
+        JOIN cuotas q ON q.id = c.id_cuota
+        WHERE c.origen = 'cuota'
+          AND q.fecha_primer_cobro IS NOT NULL
+          AND c.detalles ~ '[(][0-9]+/[0-9]+[)]$'
+      )
+      UPDATE compras c
+      SET fecha = r.correcta
+      FROM correccion r
+      WHERE c.id = r.id
+        AND r.correcta IS NOT NULL
+        AND c.fecha IS DISTINCT FROM r.correcta
+    `)
+    if (r.rowCount && r.rowCount > 0) {
+      console.log(`Gastos de cuota re-fechados: ${r.rowCount}`)
+    }
+  } catch (e) {
+    console.error('Reparación de fechas de cuotas omitida:', (e as Error).message)
+  }
+}
+
 export async function initDb() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS usuarios (
@@ -78,28 +128,10 @@ export async function initDb() {
     -- sumando meses, que es lo que permite avisar cuál ya venció.
     ALTER TABLE cuotas ADD COLUMN IF NOT EXISTS fecha_primer_cobro DATE;
 
-    -- Reparación: los gastos de cuota se fechaban el día en que se pulsaba
-    -- "marcar", no el mes en que esa cuota se cobra. Ponerse al día con un
-    -- producto antiguo amontonaba un año de cargos en el mes en curso.
-    --
-    -- El número de cuota se lee del propio detalle ("Producto (3/24)"), anclado
-    -- al final para no confundirlo con paréntesis del nombre. La expresión va sin
-    -- barras invertidas a propósito: este SQL vive en un template literal de JS,
-    -- que las consume antes de que Postgres las vea. Idempotente: la última
-    -- condición deja fuera lo que ya está bien fechado.
-    UPDATE compras c
-    SET fecha = (q.fecha_primer_cobro + ((num.n - 1) * INTERVAL '1 month'))::date
-    FROM cuotas q,
-         LATERAL (
-           SELECT ((regexp_match(c.detalles, '[(]([0-9]+)/[0-9]+[)]$'))[1])::int AS n
-         ) num
-    WHERE c.id_cuota = q.id
-      AND c.origen = 'cuota'
-      AND q.fecha_primer_cobro IS NOT NULL
-      AND num.n IS NOT NULL
-      AND num.n >= 1
-      AND c.fecha IS DISTINCT FROM (q.fecha_primer_cobro + ((num.n - 1) * INTERVAL '1 month'))::date;
+    -- Primero el calendario: sin fecha de primer cobro no hay nada que calcular,
+    -- y la reparación de abajo depende de que ya esté puesta.
     UPDATE cuotas SET fecha_primer_cobro = fecha WHERE fecha_primer_cobro IS NULL;
+
 
     -- ── Suscripciones: de un booleano sin tiempo a cargos por período ────────
     -- 'pagado' no sabía a qué mes correspondía y el reseteo manual borraba la
@@ -150,4 +182,6 @@ export async function initDb() {
       fecha       DATE NOT NULL
     );
   `)
+
+  await repararDatos()
 }

@@ -98,6 +98,20 @@ _(ideas sin clasificar — van llegando acá)_
   carril parecía desalineado, como si faltaran celdas en vez de no corresponder.
   *Hecho 2026-09-12.*
 
+- [x] **B17 · La migración de B16 tumbó el despliegue.**
+  `invalid reference to FROM-clause entry for table "c"`: PostgreSQL no permite que un
+  `LATERAL` del `FROM` referencie la tabla que el `UPDATE` está modificando. `initDb()`
+  lanzaba, el proceso salía con código 1 y Render marcaba el despliegue como fallido.
+  Reescrito con un CTE, que calcula aparte y luego se aplica.
+  Se corrigió además el orden: el re-fechado corría antes de rellenar `fecha_primer_cobro`,
+  así que en el primer arranque no habría reparado nada.
+
+  **Lo estructural:** las reparaciones de datos salieron del bloque de esquema y ahora
+  tienen su propio manejo de errores. Que las tablas existan es condición para arrancar;
+  re-fechar gastos históricos no lo es. Una corrección que falla ya no deja el servicio
+  abajo — lo registra y sigue.
+  *Hecho 2026-09-13.*
+
 - [x] **B16 · Los gastos de cuota se fechaban el día de registro, no el del cobro.**
   `POST /cuotas/:id/marcar` usaba `new Date()`, así que ponerse al día con un producto
   antiguo amontonaba todas sus cuotas en el mes en curso y lo inflaba — un notebook en 24
