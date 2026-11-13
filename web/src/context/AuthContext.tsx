@@ -12,15 +12,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Captura token que viene en la URL después del OAuth redirect
+    // Después del login (Google o empresa) el backend vuelve con un código de un
+    // solo uso, no con el JWT: se saca de la URL de inmediato y se canjea.
     const params = new URLSearchParams(window.location.search)
-    const token  = params.get('token')
-    if (token) {
-      localStorage.setItem('fin_token', token)
-      window.history.replaceState({}, '', window.location.pathname)
-    }
+    const codigo = params.get('codigo')
+    if (codigo) window.history.replaceState({}, '', window.location.pathname)
 
-    api.get<AuthUser>('/auth/me')
+    const canje = codigo
+      ? api.post<{ token: string }>('/auth/canjear', { codigo })
+          .then(({ token }) => localStorage.setItem('fin_token', token))
+          .catch(() => {})
+      : Promise.resolve()
+
+    canje
+      .then(() => api.get<AuthUser>('/auth/me'))
       .then(setUser)
       .catch(() => setUser(null))
       .finally(() => setLoading(false))
