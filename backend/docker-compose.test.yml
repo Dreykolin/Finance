@@ -1,0 +1,17 @@
+# Postgres desechable para los tests de integración.
+# Los datos viven en memoria (tmpfs): al bajar el contenedor no queda nada.
+services:
+  db-test:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: finance_test
+    ports:
+      - "5433:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d finance_test"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
