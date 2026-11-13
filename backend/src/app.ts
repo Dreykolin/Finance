@@ -4,6 +4,7 @@ import cookieParser from 'cookie-parser'
 import passport from 'passport'
 
 import authRoutes          from './routes/auth.js'
+import ssoRoutes           from './routes/sso.js'
 import comprasRoutes       from './routes/compras.js'
 import cuotasRoutes        from './routes/cuotas.js'
 import suscripcionesRoutes from './routes/suscripciones.js'
@@ -22,6 +23,7 @@ app.use(passport.initialize())
 
 app.get('/health', (_req, res) => res.json({ ok: true }))
 
+app.use('/auth/sso',      ssoRoutes)
 app.use('/auth',          authRoutes)
 app.use('/compras',       comprasRoutes)
 app.use('/cuotas',        cuotasRoutes)
