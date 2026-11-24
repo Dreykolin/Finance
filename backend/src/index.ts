@@ -1,35 +1,20 @@
 import 'dotenv/config'
-import express from 'express'
-import cors from 'cors'
-import cookieParser from 'cookie-parser'
-import passport from 'passport'
+import { app } from './app.js'
 import { initDb } from './db.js'
+import { initCartolasDb } from './cartolas/repositorio.js'
+import { initIdentidadesDb } from './identidades/repositorio.js'
+import { leerConfigSso } from './sso/config.js'
 
-import authRoutes          from './routes/auth.js'
-import comprasRoutes       from './routes/compras.js'
-import cuotasRoutes        from './routes/cuotas.js'
-import suscripcionesRoutes from './routes/suscripciones.js'
-import reservasRoutes      from './routes/reservas.js'
-import configRoutes        from './routes/configuracion.js'
-
-const app  = express()
 const PORT = process.env.PORT ?? 3000
 
-app.use(cors({ origin: process.env.FRONTEND_URL, credentials: true }))
-app.use(express.json())
-app.use(cookieParser())
-app.use(passport.initialize())
-
-app.get('/health', (_req, res) => res.json({ ok: true }))
-
-app.use('/auth',          authRoutes)
-app.use('/compras',       comprasRoutes)
-app.use('/cuotas',        cuotasRoutes)
-app.use('/suscripciones', suscripcionesRoutes)
-app.use('/reservas',      reservasRoutes)
-app.use('/configuracion', configRoutes)
+// Una configuración SSO a medias debe impedir el arranque, no fallar en el
+// primer login de un usuario.
+const sso = leerConfigSso(process.env)
+console.log(sso ? `Login empresarial habilitado (${sso.issuer.href})` : 'Login empresarial deshabilitado')
 
 initDb()
+  .then(() => initCartolasDb())
+  .then(() => initIdentidadesDb())
   .then(() => {
     app.listen(PORT, () => console.log(`API corriendo en http://localhost:${PORT}`))
   })

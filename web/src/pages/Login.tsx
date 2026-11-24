@@ -1,6 +1,16 @@
-import { TrendingUp, CreditCard, PiggyBank, Repeat2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { TrendingUp, CreditCard, PiggyBank, Repeat2, Building2 } from 'lucide-react'
+import { api } from '../lib/api'
 
 const API = import.meta.env.VITE_API_URL ?? ''
+
+const ERRORES: Record<string, string> = {
+  cuenta_existente: 'Ya tienes una cuenta con ese correo. Entra con el método que usaste la primera vez.',
+  sso: 'No se pudo completar el inicio de sesión con tu empresa. Inténtalo de nuevo.',
+}
+const ERROR_GENERICO = 'No se pudo iniciar sesión. Inténtalo de nuevo.'
+
+interface ConfigSso { habilitado: boolean; nombre?: string }
 
 const features = [
   { Icon: TrendingUp, label: 'Gastos',        desc: 'Historial y análisis mensual' },
@@ -10,6 +20,14 @@ const features = [
 ]
 
 export default function Login() {
+  const [sso, setSso] = useState<ConfigSso>({ habilitado: false })
+  const codigoError = new URLSearchParams(window.location.search).get('error')
+  const error = codigoError ? (ERRORES[codigoError] ?? ERROR_GENERICO) : null
+
+  useEffect(() => {
+    api.get<ConfigSso>('/auth/sso/config').then(setSso).catch(() => {})
+  }, [])
+
   return (
     <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-6 gap-10">
 
@@ -52,6 +70,18 @@ export default function Login() {
           </svg>
           Continuar con Google
         </a>
+        {sso.habilitado && (
+          <a
+            href={`${API}/auth/sso/login`}
+            className="w-full flex items-center justify-center gap-3 bg-zinc-900 border border-zinc-700 text-white font-bold rounded-2xl py-4 px-4 hover:bg-zinc-800 active:scale-95 transition-all text-sm"
+          >
+            <Building2 size={18} />
+            Entrar con {sso.nombre}
+          </a>
+        )}
+        {error && (
+          <p role="alert" className="text-center text-red-400 text-xs">{error}</p>
+        )}
         <p className="text-center text-zinc-600 text-xs">
           Solo tú tienes acceso a tus datos.
         </p>

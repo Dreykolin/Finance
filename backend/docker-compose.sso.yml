@@ -1,0 +1,22 @@
+# Proveedor de identidad (IdP) local para probar el SSO por OpenID Connect.
+# Keycloak hace el papel del "Microsoft/Okta de la empresa": importa el realm
+# empresa-demo con el cliente "finance" y una usuaria de prueba (ana / ana-demo).
+# Solo para desarrollo y tests e2e; nunca se despliega.
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0.7
+    command: start-dev --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./keycloak/empresa-demo-realm.json:/opt/keycloak/data/import/empresa-demo-realm.json:ro
+    healthcheck:
+      # La imagen no trae curl: se consulta /health/ready con bash puro.
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 && grep -q UP <&3"]
+      interval: 3s
+      timeout: 3s
+      retries: 60

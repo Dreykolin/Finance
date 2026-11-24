@@ -21,3 +21,9 @@ Thumbs.db
 
 # graphify-axet
 .graphify/
+
+# Cartolas bancarias reales: contienen RUT y número de cuenta. Solo se versiona
+# la cartola ficticia de los tests.
+*.xls
+*.xlsx
+!backend/test/fixtures/*.xls
