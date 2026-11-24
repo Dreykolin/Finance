@@ -1,39 +1,29 @@
 import { Router } from 'express'
 import passport from 'passport'
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20'
-import { pool } from '../db.js'
 import { generateToken, requireAuth } from '../middleware/auth.js'
+import { buscarOCrearUsuario, ErrorCuentaExistente, GOOGLE_ISSUER } from '../identidades/repositorio.js'
+import { emitirCodigo, canjearCodigo } from '../identidades/codigos.js'
 
 const router = Router()
 
+// Google es un proveedor de identidad más: pasa por el mismo modelo
+// (emisor, sub) que el login empresarial.
 passport.use(new GoogleStrategy({
   clientID:     process.env.GOOGLE_CLIENT_ID!,
   clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
   callbackURL:  process.env.GOOGLE_CALLBACK_URL!,
 }, async (_access, _refresh, profile, done) => {
   try {
-    const google_id = profile.id
-    const nombre    = profile.displayName
-    const correo    = profile.emails?.[0].value ?? ''
-
-    const existing = await pool.query('SELECT * FROM usuarios WHERE google_id = $1', [google_id])
-
-    if (existing.rows.length > 0) return done(null, existing.rows[0])
-
-    const result = await pool.query(
-      'INSERT INTO usuarios (nombre, correo, google_id) VALUES ($1, $2, $3) RETURNING *',
-      [nombre, correo, google_id]
-    )
-    const user = result.rows[0]
-
-    // Crear reserva "General" por defecto
-    await pool.query(
-      'INSERT INTO reservas (id_usuario, nombre, es_general) VALUES ($1, $2, TRUE)',
-      [user.id, 'General']
-    )
-
+    const user = await buscarOCrearUsuario({
+      emisor: GOOGLE_ISSUER,
+      sub:    profile.id,
+      correo: (profile.emails?.[0].value ?? '').trim().toLowerCase(),
+      nombre: profile.displayName,
+    })
     done(null, user)
   } catch (e) {
+    if (e instanceof ErrorCuentaExistente) return done(null, false)
     done(e as Error)
   }
 }))
@@ -45,13 +35,32 @@ router.get('/google/callback',
     session: false,
     failureRedirect: `${process.env.FRONTEND_URL}/login?error=1`,
   }),
-  (req, res) => {
-    const user = req.user as any
-    const token = generateToken({ id: user.id, nombre: user.nombre, correo: user.correo })
-
-    res.redirect(`${process.env.FRONTEND_URL}?token=${token}`)
+  async (req, res) => {
+    // El JWT no va en la URL (queda en el historial y en logs): va un código de
+    // un solo uso que el frontend canjea en POST /auth/canjear.
+    try {
+      const codigo = await emitirCodigo(req.user!.id)
+      res.redirect(`${process.env.FRONTEND_URL}/?codigo=${encodeURIComponent(codigo)}`)
+    } catch (e) {
+      console.error('No se pudo emitir el código de login:', e)
+      res.redirect(`${process.env.FRONTEND_URL}/login?error=1`)
+    }
   }
 )
+
+router.post('/canjear', async (req, res) => {
+  const { codigo } = req.body ?? {}
+  if (typeof codigo !== 'string' || !codigo) { res.status(400).json({ error: 'Falta el código' }); return }
+
+  try {
+    const usuario = await canjearCodigo(codigo)
+    if (!usuario) { res.status(401).json({ error: 'Código inválido, vencido o ya usado' }); return }
+    res.json({ token: generateToken({ id: usuario.id, nombre: usuario.nombre, correo: usuario.correo }) })
+  } catch (e) {
+    console.error('Error canjeando código de login:', e)
+    res.status(500).json({ error: 'Error interno' })
+  }
+})
 
 router.get('/me', requireAuth, (req, res) => { res.json(req.user) })
 
